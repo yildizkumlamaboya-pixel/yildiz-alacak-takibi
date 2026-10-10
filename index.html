@@ -313,7 +313,13 @@ main.container { max-width: 1120px !important; padding-left: 1.5rem; padding-rig
 <input id="catName" class="form-control" placeholder="Epoksi Astar Gri" onkeydown="if(event.key==='Enter')$('catAddBtn').click()">
 </div>
 </div>
-<div class="form-text mb-3">Tüm ürünler <b>Litre</b> bazında takip edilir. Eklediğiniz ürünü Alacaklar ekranından firmalara atarsınız.</div>
+<div class="row g-2 mb-1">
+<div class="col-6">
+<label class="small-label">Teneke (L) <span class="text-secondary">isteğe bağlı</span></label>
+<input id="catPack" type="number" inputmode="decimal" class="form-control" placeholder="ör. 20">
+</div>
+</div>
+<div class="form-text mb-3">Tüm ürünler <b>Litre</b> bazında takip edilir. Bir tenekenin kaç litre olduğunu yazarsanız sevkiyat, sipariş ve belgelerde teneke sayısı da hesaplanır. Eklediğiniz ürünü Alacaklar ekranından firmalara atarsınız.</div>
 <button id="catAddBtn" class="btn btn-dark w-100" onclick="busy(this, addCatalog)"><i class="bi bi-plus-lg me-1"></i>Ürünü Ekle</button>
 </div>
 <div class="d-flex justify-content-between align-items-center mb-2 px-1">
@@ -585,6 +591,7 @@ main.container { max-width: 1120px !important; padding-left: 1.5rem; padding-rig
 <div class="row g-2">
 <div class="col-4"><label class="small-label">Kod</label><input id="catEditCode" class="form-control"></div>
 <div class="col-8"><label class="small-label">Ürün Adı</label><input id="catEditName" class="form-control"></div>
+<div class="col-6"><label class="small-label">Teneke (L)</label><input id="catEditPack" type="number" inputmode="decimal" class="form-control" placeholder="ör. 20"></div>
 </div>
 <div class="form-text" id="catEditUsage"></div>
 </div>
@@ -610,6 +617,16 @@ main.container { max-width: 1120px !important; padding-left: 1.5rem; padding-rig
 <div class="form-text mb-3" id="bayiNameHint">Bu ad sevkiyat ve alacak kayıtlarında kullanılır, sonradan değiştirilemez.</div>
 <label class="small-label">Giriş Şifresi</label>
 <input type="text" id="bayiPass" class="form-control" placeholder="En az 4 karakter" autocomplete="off">
+<label class="small-label mt-3">Firma Logosu <span class="text-secondary">(isteğe bağlı)</span></label>
+<div class="d-flex align-items-center gap-3">
+<div id="bayiLogoPrev" class="border rounded-3 bg-white d-flex align-items-center justify-content-center flex-shrink-0" style="width:130px;height:70px"></div>
+<div class="d-flex flex-column align-items-start gap-1">
+<label class="btn btn-sm btn-outline-dark mb-0"><i class="bi bi-image me-1"></i>Logo Seç
+<input type="file" accept="image/*" hidden onchange="pickBayiLogo(this)"></label>
+<button type="button" class="btn btn-sm btn-link text-danger p-0" id="bayiLogoDel" onclick="clearBayiLogo()">Logoyu kaldır</button>
+</div>
+</div>
+<div class="form-text">Telefondan veya bilgisayardan resim seçin; otomatik küçültülür. Şeffaf arka planlı PNG en iyi sonucu verir.</div>
 </div>
 <div class="modal-footer border-0 pt-0">
 <button onclick="busy(this, saveBayi)" class="btn btn-dark w-100">Kaydet</button>

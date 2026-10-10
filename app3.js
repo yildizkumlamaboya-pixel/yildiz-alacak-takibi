@@ -1,3 +1,34 @@
+async function addPersonnel() {
+const firm = $('perFirm').value, name = $('perName').value.trim();
+if (!firm || !name) return notify('Firma ve ad soyad giriniz.', 'warning');
+const r = await rpc('portal_personnel_add', { p_firm: firm, p_name: name });
+if (!r) return;
+$('perName').value = '';
+notify('Personel eklendi.');
+await loadData();
+}
+async function deletePersonnel(id) {
+const x = personnel.find(p => p.id === id);
+if (!x || !confirm(`${x.name} listeden silinsin mi? (Geçmiş kayıtlardaki isim değişmez.)`)) return;
+const r = await rpc('portal_personnel_delete', { p_id: id });
+if (!r) return;
+notify('Personel silindi.');
+await loadData();
+}
+function setRange(kind, reload = true) {
+const now = new Date();
+let from = new Date(now), to = new Date(now);
+if (kind === 'month') from = new Date(now.getFullYear(), now.getMonth(), 1);
+if (kind === 'lastmonth') { from = new Date(now.getFullYear(), now.getMonth() - 1, 1); to = new Date(now.getFullYear(), now.getMonth(), 0); }
+if (kind === 'year') from = new Date(now.getFullYear(), 0, 1);
+$('repFrom').value = ymd(from);
+$('repTo').value = ymd(to);
+if (reload) loadReport();
+}
+const reportProducts = () => {
+const b = isAdmin() ? $('repBayiSel').value : '';
+return visibleProducts().filter(p => !b || p.allowed_bayi === b);
+};
 function fillRepProducts() {
 const el = $('repProduct'), cur = el.value;
 const withBayi = isAdmin() && !$('repBayiSel').value;
@@ -202,8 +233,8 @@ ${anyNote ? '<th style="width:22%">Açıklama</th>' : ''}
 <tbody>${s.items.map((i, k) => `
 <tr>
 <td>${k + 1}</td><td>${esc(i.code || '')}</td><td>${esc(i.product_name)}</td>
-<td class="text-end text-nowrap">${num(i.qty)} L</td>
-<td class="text-end text-nowrap fw-bold">${num(i.received_qty)} L</td>
+<td class="text-end text-nowrap">${num(i.qty)} L${tnkLine(i.product_id, i.qty)}</td>
+<td class="text-end text-nowrap fw-bold">${num(i.received_qty)} L${tnkLine(i.product_id, i.received_qty)}</td>
 ${anyNote ? `<td>${esc(i.note || (i.received_qty !== i.qty ? (i.received_qty < i.qty ? `${num(i.qty - i.received_qty)} L eksik` : `${num(i.received_qty - i.qty)} L fazla`) : ''))}</td>` : ''}
 </tr>`).join('')}
 </tbody>
@@ -213,7 +244,7 @@ ${s.items.length > 1 ? `<tfoot><tr><td colspan="3" class="text-end">Toplam</td>
 ${after && Object.keys(after).length ? `
 <div class="border rounded p-2 mb-2" style="background:#f9fafb">
 <div class="doc-lbl mb-1">Bu teslimat sonrası ${esc(s.supplier)} kalan alacak:</div>
-${s.items.filter(i => i.product_id in after).map(i => `<div>${esc(i.product_name)}: <b>${num(after[i.product_id])} L</b>${after[i.product_id] < 0 ? ' <span class="text-danger">(fazla teslim)</span>' : ''}</div>`).join('')}
+${s.items.filter(i => i.product_id in after).map(i => `<div>${esc(i.product_name)}: <b>${num(after[i.product_id])} L</b>${tnk(i.product_id, after[i.product_id]) ? ' (≈ ' + tnk(i.product_id, after[i.product_id]) + ')' : ''}${after[i.product_id] < 0 ? ' <span class="text-danger">(fazla teslim)</span>' : ''}</div>`).join('')}
 </div>` : ''}
 <div class="doc-sign">
 <div><div class="doc-lbl">Teslim Eden: ${esc(s.supplier)}<br>${esc(s.prepared_by || '')} — İmza</div>
@@ -249,7 +280,7 @@ const prodFilter = $('shipProduct').value;
 const tot = {};
 list.forEach(s => s.items.forEach(i => {
 const k = (firms.length > 1 ? s.supplier + '||' : '') + i.product_name;
-const g = tot[k] = tot[k] || { firm: s.supplier, name: i.product_name, code: i.code || '', qty: 0, recv: 0 };
+const g = tot[k] = tot[k] || { firm: s.supplier, name: i.product_name, code: i.code || '', qty: 0, recv: 0, pid: i.product_id };
 g.qty += i.qty; g.recv += i.received_qty;
 }));
 const totRows = Object.values(tot).sort((a, b) => trCmp(a.firm, b.firm) || trCmp(a.name, b.name));
@@ -280,7 +311,7 @@ ${firms.length > 1 ? `<td>${esc(s.supplier)}</td>` : ''}<td>${esc(s.irsaliye_no)
 <table class="doc-items doc-sum">
 <thead><tr>${firms.length > 1 ? '<th>Firma</th>' : ''}<th>Kod</th><th>Ürün</th><th class="text-end">Bildirilen</th><th class="text-end">Teslim Alınan</th></tr></thead>
 <tbody>${totRows.map(g => `<tr>${firms.length > 1 ? `<td>${esc(g.firm)}</td>` : ''}<td>${esc(g.code)}</td><td>${esc(g.name)}</td>
-<td class="text-end text-nowrap">${num(r2(g.qty))} L</td><td class="text-end text-nowrap fw-bold">${num(r2(g.recv))} L</td></tr>`).join('')}</tbody>
+<td class="text-end text-nowrap">${num(r2(g.qty))} L${tnkLine(g.pid, g.qty)}</td><td class="text-end text-nowrap fw-bold">${num(r2(g.recv))} L${tnkLine(g.pid, g.recv)}</td></tr>`).join('')}</tbody>
 </table>
 <div class="doc-lbl mt-2">Her teslimatın imzalı belgesi sonraki sayfalardadır.</div>
 ${docFooter()}`;
@@ -370,7 +401,7 @@ ${u.active ? '' : `<span class="badge text-bg-secondary" style="font-size:.6rem"
 </div>
 </div>
 <div class="d-flex gap-1">
-<button onclick="openBayiModal(${i})" class="btn btn-sm btn-outline-dark" title="Şifre belirle"><i class="bi bi-key"></i></button>
+<button onclick="openBayiModal(${i})" class="btn btn-sm btn-outline-dark" title="Şifre / logo"><i class="bi bi-pencil"></i></button>
 <button onclick="busy(this, () => toggleBayi(${i}))" class="btn btn-sm ${u.active ? 'btn-outline-danger' : 'btn-outline-success'}" title="${u.active ? 'Pasif yap' : 'Aktif yap'}">
 <i class="bi ${u.active ? 'bi-person-dash' : 'bi-person-check'}"></i>
 </button>
@@ -387,7 +418,10 @@ if (me) { fillSelects(); renderPersonnel(); }
 function openBayiModal(i) {
 bayiEditingNew = (i === undefined);
 const u = bayiEditingNew ? null : users[i];
-$('bayiModalTitle').innerText = bayiEditingNew ? 'Yeni Firma' : 'Şifre Belirle';
+$('bayiModalTitle').innerText = bayiEditingNew ? 'Yeni Firma' : 'Firmayı Düzenle';
+$('bayiPass').placeholder = bayiEditingNew || !u.has_password ? 'En az 4 karakter' : 'Değiştirmeyecekseniz boş bırakın';
+bayiLogoNew = undefined;
+showBayiLogo(u ? ((META.logos && META.logos[u.name]) || LOGOS[u.name]) : null, !!(u && META.logos && META.logos[u.name]));
 $('bayiName').value = u ? u.name : '';
 $('bayiName').readOnly = !bayiEditingNew;
 $('bayiName').classList.toggle('bg-light', !bayiEditingNew);
@@ -395,16 +429,59 @@ $('bayiNameHint').classList.toggle('d-none', !bayiEditingNew);
 $('bayiPass').value = '';
 bayiModal.show();
 }
+let bayiLogoNew;
+function showBayiLogo(L, removable) {
+$('bayiLogoPrev').innerHTML = L ? `<img src="${L.src}" alt="" style="max-width:120px;max-height:62px;object-fit:contain">`
+: '<span class="tiny text-secondary">Logo yok</span>';
+$('bayiLogoDel').classList.toggle('d-none', !removable);
+}
+function shrinkImage(file, max = 360) {
+return new Promise((resolve, reject) => {
+const url = URL.createObjectURL(file), img = new Image();
+img.onload = () => {
+const k = Math.min(1, max / Math.max(img.width, img.height));
+const w = Math.max(1, Math.round(img.width * k)), h = Math.max(1, Math.round(img.height * k));
+const c = document.createElement('canvas'); c.width = w; c.height = h;
+c.getContext('2d').drawImage(img, 0, 0, w, h);
+URL.revokeObjectURL(url);
+let src = c.toDataURL('image/webp', 0.85);
+if (!src.startsWith('data:image/webp')) src = c.toDataURL('image/png');
+resolve({ src, r: Math.round(w / h * 1000) / 1000 });
+};
+img.onerror = () => { URL.revokeObjectURL(url); reject(new Error('resim')); };
+img.src = url;
+});
+}
+async function pickBayiLogo(input) {
+const f = input.files[0]; input.value = '';
+if (!f) return;
+try { bayiLogoNew = await shrinkImage(f); showBayiLogo(bayiLogoNew, true); }
+catch (e) { notify('Resim okunamadı.', 'danger'); }
+}
+function clearBayiLogo() {
+bayiLogoNew = null;
+const name = $('bayiName').value.trim();
+showBayiLogo(LOGOS[name] || null, false);
+}
 async function saveBayi() {
 const name = $('bayiName').value.trim(), pass = $('bayiPass').value;
 if (!name) return notify('Firma adı giriniz.', 'warning');
-if (pass.length < 4) return notify('Şifre en az 4 karakter olmalı.', 'warning');
+if ((bayiEditingNew || pass) && pass.length < 4) return notify('Şifre en az 4 karakter olmalı.', 'warning');
 if (bayiEditingNew && users.some(u => u.name.toLocaleLowerCase('tr') === name.toLocaleLowerCase('tr')))
 return notify('Bu isimde bir hesap zaten var.', 'warning');
+if (!bayiEditingNew && !pass && bayiLogoNew === undefined) return notify('Değişiklik yapılmadı.', 'secondary');
+if (bayiEditingNew || pass) {
 const r = await rpc('portal_admin_save_bayi', { p_name: name, p_new_pass: pass });
 if (!r) return;
+}
+if (bayiLogoNew !== undefined) {
+const { error } = await sb.rpc('portal_admin_set_logo', { p_user: me.name, p_pass: myPass, p_name: name, p_logo: bayiLogoNew });
+if (error) return notify(/portal_admin_set_logo|function|schema cache/i.test(error.message)
+? "Logo için Supabase'de teneke-logo.sql kurulumunun çalıştırılması gerekiyor." : error.message, 'danger');
+}
 bayiModal.hide();
-notify(bayiEditingNew ? 'Firma hesabı oluşturuldu.' : 'Firma şifresi güncellendi.');
+notify(bayiEditingNew ? 'Firma hesabı oluşturuldu.' : 'Firma bilgileri güncellendi.');
+await loadData();
 await loadUsers();
 }
 async function toggleBayi(i) {
@@ -437,7 +514,7 @@ auditRows = data || [];
 pages.audit = 1;
 renderAudit();
 }
-const AUD_TR = { irsaliye_no: 'İrsaliye', prepared_by: 'Düzenleyen', received_by: 'Teslim alan', note: 'Not', due_date: 'Termin',
+const AUD_TR = { pack_size: 'Teneke (L)', irsaliye_no: 'İrsaliye', prepared_by: 'Düzenleyen', received_by: 'Teslim alan', note: 'Not', due_date: 'Termin',
 code: 'Kod', name: 'Ad', approve_note: 'Not', critical: 'Uyarı sınırı' };
 function auditText(a) {
 if (a.text) return { icon: 'bi-dot', cls: 'text-secondary', text: a.text };
@@ -489,23 +566,4 @@ return a.op === 'RESTORE'
 : { icon: 'bi-cloud-plus', cls: 'text-secondary', text: `Manuel yedek aldı${r.note ? ': ' + r.note : ''}` };
 }
 return { icon: 'bi-dot', cls: 'text-secondary', text: `${a.tbl} ${a.op}` };
-}
-function renderAudit() {
-$('auditCount').innerText = `${auditRows.length} işlem`;
-if (!auditRows.length) {
-$('auditList').innerHTML = `<div class="text-secondary small text-center py-2">Bu aralıkta işlem yok.</div>`;
-$('auditPager').innerHTML = '';
-return;
-}
-$('auditPager').innerHTML = pagerHtml(auditRows.length, 'audit');
-$('auditList').innerHTML = pageSlice(auditRows, 'audit').map(a => {
-const d = auditText(a);
-return `<div class="border-bottom py-2 d-flex gap-2">
-<i class="bi ${d.icon} ${d.cls} mt-1"></i>
-<div class="flex-grow-1">
-<div class="small">${esc(d.text)}</div>
-<div class="tiny text-secondary">${dt(a.created_at)} • <b>${esc(a.actor || '-')}</b>${a.firm && a.firm !== a.actor ? ' • ' + esc(a.firm) : ''}</div>
-</div>
-</div>`;
-}).join('');
 }

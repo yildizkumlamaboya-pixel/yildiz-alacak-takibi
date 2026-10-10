@@ -1,3 +1,12 @@
+function resetSevkForm() {
+if (!me || isAdmin()) return;
+convertingOrder = null; pendingSevk = null;
+$('sevkOrderBanner').classList.add('d-none');
+$('sevkNo').value = '';
+personPicker('sevkPerson', me.name, '');
+itemEditor('sevkItems', visibleProducts(), [], false);
+if (sevkPad) sevkPad.clear();
+}
 async function createShipment() {
 const no = $('sevkNo').value.trim();
 if (!no) return notify('İrsaliye numarasını giriniz.', 'warning');
@@ -22,7 +31,7 @@ const p = prodById(i.product_id) || {};
 const oi = o ? o.items.find(x => x.product_id === i.product_id) : null;
 const diff = o && (!oi || oi.qty !== i.qty);
 return `<tr><td>${esc(p.name)}</td>${o ? `<td class="text-end text-secondary">${oi ? num(oi.qty) + ' L' : '-'}</td>` : ''}
-<td class="text-end fw-bold ${diff ? 'diff' : ''}">${num(i.qty)} L</td></tr>`;
+<td class="text-end fw-bold ${diff ? 'diff' : ''}">${num(i.qty)} L${tnkLine(i.product_id, i.qty)}</td></tr>`;
 }).join('')}
 ${o ? o.items.filter(oi => !items.some(i => i.product_id === oi.product_id)).map(oi =>
 `<tr><td>${esc(oi.product_name)}</td><td class="text-end text-secondary">${num(oi.qty)} L</td><td class="text-end diff">gönderilmiyor</td></tr>`).join('') : ''}
@@ -93,7 +102,7 @@ ${isAdmin() ? firmLogo(o.bayi, 20) + `<span class="badge text-bg-light border fw
 <div class="text-end">${orderBadge(o)}</div>
 </div>
 ${o.note ? `<div class="small mb-1"><i class="bi bi-chat-left-text text-secondary"></i> ${esc(o.note)}</div>` : ''}
-<div class="border-top pt-1">${o.items.map(i => `<div class="item-line"><span>${esc(i.product_name)}</span><span class="fw-medium">${num(i.qty)} L</span></div>`).join('')}</div>
+<div class="border-top pt-1">${o.items.map(i => `<div class="item-line"><span>${esc(i.product_name)}</span><span class="fw-medium text-nowrap">${num(i.qty)} L${tnkSpan(i.product_id, i.qty)}</span></div>`).join('')}</div>
 ${o.items.length > 1 ? `<div class="item-line border-top mt-1 pt-1 text-secondary"><span>Toplam</span><span>${num(total)} L</span></div>` : ''}
 ${st === 'converted' ? `<div class="tiny mt-2 clickable text-primary" onclick="openDetail(${o.shipment.id})"><i class="bi bi-truck"></i> Sevkiyat #${esc(o.shipment.irsaliye_no)} — detayı gör</div>` : ''}
 ${st === 'open' && !isAdmin() ? `
@@ -245,8 +254,8 @@ ${row('Son Düzenleme', s.updated_at ? `${esc(s.updated_by)} • ${dt(s.updated_
 <tbody>${s.items.map(i => `
 <tr>
 <td>${esc(i.product_name)}${i.note ? `<div class="tiny diff">${esc(i.note)}</div>` : ''}</td>
-<td class="text-end text-nowrap">${num(i.qty)} L</td>
-${pending ? '' : `<td class="text-end text-nowrap fw-semibold ${i.received_qty !== i.qty ? 'diff' : ''}">${num(i.received_qty)} L</td>`}
+<td class="text-end text-nowrap">${num(i.qty)} L${tnkLine(i.product_id, i.qty)}</td>
+${pending ? '' : `<td class="text-end text-nowrap fw-semibold ${i.received_qty !== i.qty ? 'diff' : ''}">${num(i.received_qty)} L${tnkLine(i.product_id, i.received_qty)}</td>`}
 </tr>`).join('')}
 </tbody>
 </table>
@@ -305,7 +314,7 @@ $('apvItems').innerHTML = approving.items.map(i => `
 <div class="item-row" data-item="${i.id}" data-qty="${i.qty}" data-pid="${i.product_id}">
 <div class="d-flex justify-content-between gap-2">
 <span class="fw-semibold small">${esc(i.product_name)}</span>
-<span class="small text-nowrap">Bildirilen: <b>${num(i.qty)} L</b></span>
+<span class="small text-nowrap">Bildirilen: <b>${num(i.qty)} L</b>${tnkSpan(i.product_id, i.qty)}</span>
 </div>
 <div class="row g-2 mt-1 align-items-end">
 <div class="col-5">
@@ -331,6 +340,7 @@ inp.classList.toggle('border-warning', diff);
 if (!p) return;
 const after = r2(p.qty - (isNaN(rec) ? 0 : rec));
 row.querySelector('.apv-after').innerHTML =
+(!isNaN(rec) && tnk(p.id, rec) ? `<div class="text-primary">Gelen: ${tnk(p.id, rec)}</div>` : '') +
 `Kalan alacak: ${num(p.qty)} → <b class="${after < 0 ? 'text-danger' : 'text-success'}">${num(after)} L</b>` +
 (diff ? `<div class="diff">${rec < qty ? `${num(qty - rec)} L eksik` : `${num(rec - qty)} L fazla`}</div>` : '');
 }
@@ -387,6 +397,7 @@ return `
 <div>
 <div class="tiny text-secondary">Kalan</div>
 <div class="fw-bold ${st.txt}">${num(p.qty)} L</div>
+${tnk(p.id, p.qty) ? `<div class="tiny text-secondary">≈ ${tnk(p.id, p.qty)}</div>` : ''}
 ${st.badge}
 </div>
 ${isAdmin() ? `<button class="btn btn-sm btn-light border" title="Düzenle" onclick="event.stopPropagation(); openProductEdit(${p.id})"><i class="bi bi-pencil"></i></button>` : ''}
@@ -489,7 +500,7 @@ return `
 <div class="card p-3 d-flex flex-row justify-content-between align-items-center">
 <div class="me-2">
 <div class="fw-semibold small">${esc(c.name)}</div>
-<div class="tiny text-secondary">${esc(c.code)} • Litre • ${used.length
+<div class="tiny text-secondary">${esc(c.code)} • ${c.pack_size ? `<span class="text-primary">${num(c.pack_size)} L teneke</span>` : 'Litre'} • ${used.length
 ? used.map(p => `${esc(p.allowed_bayi)}: ${num(p.qty)} L`).join(', ')
 : '<span class="fst-italic">firmaya atanmadı</span>'}</div>
 </div>
@@ -503,9 +514,11 @@ return `
 async function addCatalog() {
 const code = $('catCode').value.trim(), name = $('catName').value.trim();
 if (!code || !name) return notify('Ürün kodu ve adını giriniz.', 'warning');
-const r = await rpc('portal_catalog_add', { p_code: code, p_name: name });
+const pack = parseFloat($('catPack').value);
+if ($('catPack').value !== '' && !(pack > 0)) return notify('Teneke litresi geçersiz.', 'warning');
+const r = await rpc('portal_catalog_add', pack > 0 ? { p_code: code, p_name: name, p_pack: pack } : { p_code: code, p_name: name });
 if (!r) return;
-$('catCode').value = ''; $('catName').value = '';
+$('catCode').value = ''; $('catName').value = ''; $('catPack').value = '';
 notify('Ürün eklendi.');
 await loadData();
 }
@@ -514,6 +527,7 @@ editingCat = catalog.find(c => c.id === id);
 if (!editingCat) return;
 $('catEditCode').value = editingCat.code;
 $('catEditName').value = editingCat.name;
+$('catEditPack').value = editingCat.pack_size ?? '';
 const used = products.filter(p => p.catalog_id === id).map(p => p.allowed_bayi);
 $('catEditUsage').innerText = used.length
 ? `Kullanan firmalar: ${used.join(', ')}. Yeni ad tüm alacak kalemlerine ve sevkiyatlara yansır.`
@@ -523,7 +537,11 @@ catModal.show();
 async function saveCatEdit() {
 const code = $('catEditCode').value.trim(), name = $('catEditName').value.trim();
 if (!code || !name) return notify('Ürün kodu ve adı zorunlu.', 'warning');
-const r = await rpc('portal_catalog_update', { p_id: editingCat.id, p_code: code, p_name: name });
+const pack = parseFloat($('catEditPack').value);
+if ($('catEditPack').value !== '' && !(pack > 0)) return notify('Teneke litresi geçersiz.', 'warning');
+const params = { p_id: editingCat.id, p_code: code, p_name: name };
+if (pack > 0 || editingCat.pack_size) params.p_pack = pack > 0 ? pack : null;
+const r = await rpc('portal_catalog_update', params);
 if (!r) return;
 catModal.hide();
 notify('Ürün güncellendi.');
@@ -550,34 +568,3 @@ $('perList').innerHTML = !list.length
 <button class="btn btn-sm btn-outline-danger" title="Sil" onclick="busy(this, () => deletePersonnel(${x.id}))"><i class="bi bi-trash"></i></button>
 </div>`).join('');
 }
-async function addPersonnel() {
-const firm = $('perFirm').value, name = $('perName').value.trim();
-if (!firm || !name) return notify('Firma ve ad soyad giriniz.', 'warning');
-const r = await rpc('portal_personnel_add', { p_firm: firm, p_name: name });
-if (!r) return;
-$('perName').value = '';
-notify('Personel eklendi.');
-await loadData();
-}
-async function deletePersonnel(id) {
-const x = personnel.find(p => p.id === id);
-if (!x || !confirm(`${x.name} listeden silinsin mi? (Geçmiş kayıtlardaki isim değişmez.)`)) return;
-const r = await rpc('portal_personnel_delete', { p_id: id });
-if (!r) return;
-notify('Personel silindi.');
-await loadData();
-}
-function setRange(kind, reload = true) {
-const now = new Date();
-let from = new Date(now), to = new Date(now);
-if (kind === 'month') from = new Date(now.getFullYear(), now.getMonth(), 1);
-if (kind === 'lastmonth') { from = new Date(now.getFullYear(), now.getMonth() - 1, 1); to = new Date(now.getFullYear(), now.getMonth(), 0); }
-if (kind === 'year') from = new Date(now.getFullYear(), 0, 1);
-$('repFrom').value = ymd(from);
-$('repTo').value = ymd(to);
-if (reload) loadReport();
-}
-const reportProducts = () => {
-const b = isAdmin() ? $('repBayiSel').value : '';
-return visibleProducts().filter(p => !b || p.allowed_bayi === b);
-};

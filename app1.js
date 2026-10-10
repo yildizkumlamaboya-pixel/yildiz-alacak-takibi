@@ -1,6 +1,6 @@
 const ADMIN_FIRM = 'Yıldız Kumlama Boya';
 function firmLogo(name, h = 20) {
-const L = LOGOS[name];
+const L = (META.logos && META.logos[name]) || LOGOS[name];
 if (L) {
 if (L.r < 1.6) h = Math.round(h * 1.4);
 return `<img src="${L.src}" alt="${esc(name)}" class="firm-logo" style="height:${h}px;max-width:${Math.round(h * 3.6)}px">`;
@@ -18,6 +18,7 @@ let catalog = [], products = [], shipments = [], personnel = [], users = [], bac
 let orderFilter = 'open', editingOrder = null, convertingOrder = null, pendingSevk = null;
 let shipFilter = 'all', editing = null, approving = null, signaturePad = null, sevkPad = null;
 let bayiEditingNew = false, editingProduct = null, editingCat = null;
+let META = { packs: {}, logos: {} };
 let channel = null, reloadTimer = null;
 let currentTab = 'tabOnay', navStack = [], exitTimer = null;
 const TABS = ['tabOnay', 'tabSiparis', 'tabStok', 'tabSevkEt', 'tabUrun', 'tabRapor', 'tabAyarlar'];
@@ -137,6 +138,14 @@ return;
 }
 (items && items.length ? items : [{}]).forEach(it => addItemRow(id, it));
 }
+const packOf = pid => Number(META.packs[pid]) || 0;
+function tnk(pid, qty) {
+const pk = packOf(pid), q = Number(qty);
+if (!pk || !(q > 0)) return '';
+return `${num(r2(q / pk))} teneke`;
+}
+const tnkSpan = (pid, qty) => { const t = tnk(pid, qty); return t ? ` <span class="tiny text-secondary fw-normal">(${t})</span>` : ''; };
+const tnkLine = (pid, qty) => { const t = tnk(pid, qty); return t ? `<div class="doc-lbl">${t}</div>` : ''; };
 function addItemRow(id, it = {}) {
 const ed = editors[id], rows = $(id).querySelector('.it-rows');
 const used = new Set([...rows.querySelectorAll('.it-prod')].map(s => Number(s.value)));
@@ -151,7 +160,7 @@ row.className = 'item-row';
 row.innerHTML = `
 <div class="d-flex gap-2 align-items-center">
 <select class="form-select form-select-sm it-prod" onchange="updateTotals('${id}')">
-${ed.prods.map(p => `<option value="${p.id}" ${p.id === pid ? 'selected' : ''}>${esc(p.name)} • Kalan ${num(p.qty)} L</option>`).join('')}
+${ed.prods.map(p => `<option value="${p.id}" ${p.id === pid ? 'selected' : ''}>${esc(p.name)} • Kalan ${num(p.qty)} L${packOf(p.id) ? ` • ${num(packOf(p.id))} L teneke` : ''}</option>`).join('')}
 </select>
 <button type="button" class="btn btn-sm btn-outline-danger" title="Satırı sil" onclick="removeItemRow(this, '${id}')"><i class="bi bi-x-lg"></i></button>
 </div>
@@ -159,6 +168,7 @@ ${ed.prods.map(p => `<option value="${p.id}" ${p.id === pid ? 'selected' : ''}>$
 <div class="col">
 <div class="tiny text-secondary">${ed.withReceived ? 'Bildirilen (L)' : 'Miktar (L)'}</div>
 <input type="number" inputmode="decimal" class="form-control form-control-sm it-qty" value="${it.qty ?? ''}" placeholder="0" oninput="updateTotals('${id}')">
+<div class="tiny text-primary it-pack mt-1"></div>
 </div>
 ${ed.withReceived ? `
 <div class="col">
@@ -177,10 +187,17 @@ btn.closest('.item-row').remove();
 updateTotals(id);
 }
 function updateTotals(id) {
-if (id !== 'sevkItems') return;
 const rows = [...$(id).querySelectorAll('.item-row')];
+let tk = 0, anyPack = false;
+rows.forEach(r => {
+const pid = Number(r.querySelector('.it-prod').value), q = parseFloat(r.querySelector('.it-qty').value) || 0;
+const h = r.querySelector('.it-pack');
+if (h) h.textContent = packOf(pid) ? (q > 0 ? `= ${tnk(pid, q)}` : `${num(packOf(pid))} L'lik teneke`) : '';
+if (packOf(pid)) { anyPack = true; tk += q / packOf(pid); }
+});
+if (id !== 'sevkItems') return;
 const total = rows.reduce((a, r) => a + (parseFloat(r.querySelector('.it-qty').value) || 0), 0);
-$('sevkTotal').innerText = rows.length ? `${rows.length} kalem • Toplam ${num(total)} L` : '';
+$('sevkTotal').innerText = rows.length ? `${rows.length} kalem • Toplam ${num(total)} L${anyPack && tk ? ` • ${num(r2(tk))} teneke` : ''}` : '';
 }
 function readItems(id) {
 const ed = editors[id];
@@ -311,8 +328,10 @@ if (!$('tabRapor').classList.contains('d-none')) loadReport();
 }, 500);
 }
 async function loadData() {
-const r = await rpc('portal_data');
+const [r, m] = await Promise.all([rpc('portal_data'),
+sb.rpc('portal_meta', { p_user: me.name, p_pass: myPass }).catch(() => ({ error: true }))]);
 if (!r) return;
+META = m && !m.error && m.data ? { packs: m.data.packs || {}, logos: m.data.logos || {} } : { packs: {}, logos: {} };
 const d = r.data || {};
 catalog = d.catalog || [];
 products = (d.products || []).map(p => ({ ...p, qty: Number(p.qty), critical: Number(p.critical) }));
@@ -514,7 +533,7 @@ return `<div class="item-line">
 <span>${esc(i.product_name)}</span>
 <span class="text-nowrap ${diff ? 'diff fw-semibold' : 'fw-medium'}">${diff
 ? `${num(i.qty)} → ${num(i.received_qty)} L`
-: `${num(i.qty)} L`}</span>
+: `${num(i.qty)} L`}${tnkSpan(i.product_id, isPending(s) ? i.qty : i.received_qty)}</span>
 </div>`;
 }).join('');
 }
@@ -577,13 +596,4 @@ ${canEdit ? `
 </div>` : ''}
 </div>`;
 }).join('');
-}
-function resetSevkForm() {
-if (!me || isAdmin()) return;
-convertingOrder = null; pendingSevk = null;
-$('sevkOrderBanner').classList.add('d-none');
-$('sevkNo').value = '';
-personPicker('sevkPerson', me.name, '');
-itemEditor('sevkItems', visibleProducts(), [], false);
-if (sevkPad) sevkPad.clear();
 }

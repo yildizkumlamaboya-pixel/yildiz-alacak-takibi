@@ -1,3 +1,22 @@
+function renderAudit() {
+$('auditCount').innerText = `${auditRows.length} işlem`;
+if (!auditRows.length) {
+$('auditList').innerHTML = `<div class="text-secondary small text-center py-2">Bu aralıkta işlem yok.</div>`;
+$('auditPager').innerHTML = '';
+return;
+}
+$('auditPager').innerHTML = pagerHtml(auditRows.length, 'audit');
+$('auditList').innerHTML = pageSlice(auditRows, 'audit').map(a => {
+const d = auditText(a);
+return `<div class="border-bottom py-2 d-flex gap-2">
+<i class="bi ${d.icon} ${d.cls} mt-1"></i>
+<div class="flex-grow-1">
+<div class="small">${esc(d.text)}</div>
+<div class="tiny text-secondary">${dt(a.created_at)} • <b>${esc(a.actor || '-')}</b>${a.firm && a.firm !== a.actor ? ' • ' + esc(a.firm) : ''}</div>
+</div>
+</div>`;
+}).join('');
+}
 async function loadBackups() {
 const r = await rpc('portal_admin_backup_list');
 if (!r) return;
