@@ -1,0 +1,596 @@
+<!DOCTYPE html>
+<html lang="tr" data-bs-theme="light">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Yıldız Kumlama Boya - Alacak Takibi</title>
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#ffffff">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Yıldız Alacak">
+<link rel="icon" type="image/png" href="icon-192.png">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+<link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="https://cdn.jsdelivr.net/npm/signature_pad@4.1.7/dist/signature_pad.umd.min.js"></script>
+<script src="config.js"></script>
+<script>window.PORTAL_CONFIG = window.PORTAL_CONFIG || {};</script>
+<style>
+:root { --bs-body-font-family: 'Inter', sans-serif; --brand: #f59e0b; }
+body { background: #f4f6f9; padding-bottom: 84px; -webkit-user-select: none; user-select: none; }
+input, textarea { -webkit-user-select: text; user-select: text; }
+.app-header { background: rgba(255,255,255,.92); backdrop-filter: blur(8px); }
+.brand-logo { height: 34px; width: auto; display: block; }
+.firm-logo { object-fit: contain; vertical-align: middle; }
+.firm-ini { display: inline-flex; align-items: center; justify-content: center; border-radius: 50%; background: #e5e7eb; color: #374151; font-weight: 700; vertical-align: middle; }
+.hero { background: linear-gradient(135deg, #fffbea 0%, #ffffff 60%); }
+.hero .big { font-size: 1.35rem; font-weight: 700; line-height: 1.1; }
+.doc-logo { height: 52px; width: auto; }
+.card { border: 1px solid #e5e7eb; border-radius: 14px; box-shadow: 0 1px 2px rgba(0,0,0,.03); }
+.form-control, .form-select { border-radius: 10px; font-size: .875rem; padding: .55rem .75rem; }
+.form-control-sm, .form-select-sm { padding: .35rem .6rem; font-size: .8rem; border-radius: 8px; }
+.btn { border-radius: 10px; font-weight: 500; }
+.section-title { font-size: .72rem; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: #6b7280; }
+.small-label { font-size: .75rem; color: #6b7280; margin-bottom: .25rem; }
+.tiny { font-size: .7rem; }
+.over-card { border-color: #fecaca !important; background: #fff5f5; }
+.low-card { border-color: #fde68a !important; background: #fffbeb; }
+.done-card { background: #f9fafb; }
+.clickable { cursor: pointer; }
+.clickable:active { transform: scale(.995); }
+.item-row { border: 1px solid #e5e7eb; border-radius: 12px; padding: .6rem; margin-bottom: .5rem; background: #fafafa; }
+.item-line { display: flex; justify-content: space-between; gap: .5rem; font-size: .82rem; padding: 2px 0; }
+.diff { color: #b45309; }
+.sig-wrap { border: 1px solid #dee2e6; border-radius: 12px; overflow: hidden; background: #fff; }
+.sig-canvas { width: 100%; height: 150px; touch-action: none; display: block; }
+.stat { background: #fff; border: 1px solid #e5e7eb; border-radius: 12px; padding: .6rem .75rem; }
+.stat .v { font-weight: 700; font-size: 1rem; }
+.table { font-size: .8rem; }
+.table th { font-weight: 600; color: #6b7280; font-size: .7rem; text-transform: uppercase; }
+.live-dot { width: 7px; height: 7px; border-radius: 50%; background: #d1d5db; display: inline-block; }
+.live-dot.on { background: #22c55e; box-shadow: 0 0 0 3px rgba(34,197,94,.2); }
+/* Yazdırılabilir belgeler */
+#docView { position: fixed; inset: 0; background: #e5e7eb; z-index: 2000; overflow-y: auto; }
+.doc-toolbar { position: sticky; top: 0; display: flex; justify-content: space-between; gap: .5rem; padding: .75rem; background: #fff; border-bottom: 1px solid #e5e7eb; z-index: 1; }
+.doc-page { background: #fff; max-width: 780px; margin: 1rem auto; padding: 28px; color: #111; font-size: 13px; box-shadow: 0 2px 10px rgba(0,0,0,.08); -webkit-user-select: text; user-select: text; }
+.doc-page h1 { font-size: 19px; font-weight: 700; letter-spacing: .04em; margin: 0; color: #111; }
+.doc-page table { width: 100%; border-collapse: collapse; }
+.doc-items th, .doc-items td { border: 1px solid #333; padding: 6px 7px; vertical-align: top; }
+.doc-items th { background: #f3f4f6; font-size: 10.5px; text-transform: uppercase; }
+.doc-items tfoot td { font-weight: 700; background: #f9fafb; }
+.doc-meta td { padding: 3px 8px 3px 0; vertical-align: top; width: 50%; }
+.doc-lbl { color: #6b7280; font-size: 11px; }
+.doc-sign { display: flex; gap: 16px; margin-top: 24px; page-break-inside: avoid; }
+.doc-sign > div { flex: 1; border: 1px solid #333; border-radius: 6px; padding: 8px; min-height: 120px; }
+.doc-sign img { max-height: 85px; max-width: 100%; display: block; margin: 6px auto 0; }
+.doc-h2 { font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; margin: 18px 0 6px; }
+.doc-break { border-top: 2px dashed #9ca3af; margin: 28px -28px; height: 0; }
+.doc-sum td, .doc-sum th { font-size: 11.5px; }
+@media screen and (max-width: 600px) { .doc-page { padding: 14px; font-size: 12px; } .doc-items th, .doc-items td { padding: 4px; } .doc-sum td, .doc-sum th { font-size: 10.5px; } .doc-break { margin: 20px -14px; } }
+.pager { display: flex; justify-content: center; align-items: center; gap: .35rem; margin-top: .75rem; flex-wrap: wrap; }
+.pager .btn { min-width: 36px; }
+.filter-card { background: #fff; border: 1px solid #e5e7eb; border-radius: 12px; padding: .75rem; }
+.quick-range .btn { font-size: .7rem; padding: .2rem .55rem; }
+@media print {
+@page { size: A4; margin: 12mm; }
+body { background: #fff !important; padding: 0 !important; }
+body > *:not(#docView) { display: none !important; }
+#docView { position: static; background: #fff; overflow: visible; }
+.no-print { display: none !important; }
+.doc-page { box-shadow: none; margin: 0; max-width: none; padding: 0; }
+.doc-break { break-before: page; page-break-before: always; border: 0; margin: 0; }
+}
+.bottom-nav { position: fixed; bottom: 0; left: 0; right: 0; background: #fff; border-top: 1px solid #e5e7eb; z-index: 1030; padding-bottom: env(safe-area-inset-bottom); }
+.nav-badge { position: absolute; top: 4px; left: 50%; margin-left: 6px; min-width: 16px; height: 16px; padding: 0 4px; border-radius: 8px; background: #dc3545; color: #fff; font-size: .6rem; line-height: 16px; font-weight: 700; }
+.bottom-nav button { position: relative; }
+.order-banner { background: #eef6ff; border: 1px solid #b6d4fe; border-radius: 12px; padding: .6rem .75rem; }
+.bottom-nav button { flex: 1; border: 0; background: none; padding: .55rem 0 .45rem; font-size: .64rem; color: #9ca3af; display: flex; flex-direction: column; align-items: center; gap: 2px; }
+.bottom-nav button i { font-size: 1.2rem; }
+.bottom-nav button.active { color: #111827; font-weight: 600; }
+.bottom-nav button.active i { color: var(--brand); }
+</style>
+</head>
+<body>
+<header class="app-header border-bottom sticky-top px-3 py-2 d-flex justify-content-between align-items-center">
+<img id="brandLogo" class="brand-logo" alt="Yıldız Kumlama &amp; Boya">
+<div class="d-flex align-items-center gap-2">
+<div class="text-end lh-sm">
+<div class="fw-semibold small" id="userFirm"></div>
+<div class="text-secondary d-flex align-items-center justify-content-end gap-1" style="font-size:.7rem">
+<span id="liveDot" class="live-dot d-none" title="Canlı bağlantı"></span>
+<span id="userRoleTitle">Alacak Takibi</span>
+</div>
+</div>
+<button onclick="logout()" id="logoutBtn" class="btn btn-sm btn-outline-secondary d-none" title="Çıkış">
+<i class="bi bi-box-arrow-right"></i>
+</button>
+</div>
+</header>
+<main class="container py-3" style="max-width:600px">
+<section id="loginSection" class="card p-4 mt-4">
+<div class="text-center mb-4">
+<img id="loginLogo" alt="Yıldız Kumlama &amp; Boya" class="mb-3" style="width:72%;max-width:260px">
+<h5 class="fw-semibold mb-1">Alacak Takibi</h5>
+<p class="text-secondary small mb-0">Hesabınızı seçip şifrenizi giriniz.</p>
+</div>
+<div class="mb-3">
+<label class="small-label">Kullanıcı Hesabı</label>
+<select id="loginRole" class="form-select"><option value="">Yükleniyor...</option></select>
+</div>
+<div class="mb-3">
+<label class="small-label">Şifre</label>
+<input type="password" id="loginPass" class="form-control" placeholder="••••" onkeydown="if(event.key==='Enter')$('loginBtn').click()">
+</div>
+<div class="form-check mb-4">
+<input class="form-check-input" type="checkbox" id="loginRemember" checked>
+<label class="form-check-label small" for="loginRemember">Oturumu açık tut (yenileyince şifre sorma)</label>
+</div>
+<button id="loginBtn" onclick="busy(this, () => login())" class="btn btn-dark w-100 py-2">Giriş Yap</button>
+</section>
+<div id="appSection" class="d-none">
+<section id="tabOnay">
+<div id="homeHero"></div>
+<div id="pendingAlert"></div>
+<div class="d-flex justify-content-between align-items-center mb-2 px-1">
+<span class="section-title">Sevkiyat & Teslimat</span>
+<span class="badge text-bg-light border" id="shipmentCount">0 kayıt</span>
+</div>
+<input id="shipSearch" class="form-control mb-2" placeholder="Ara: irsaliye, ürün, firma, personel" oninput="shipFiltersChanged()">
+<div class="d-flex gap-2 mb-2">
+<button class="btn btn-sm btn-light border text-start d-flex align-items-center gap-2" style="flex:1 1 0;min-width:0" id="shipFilterToggle" onclick="toggleShipFilters()">
+<i class="bi bi-funnel"></i><span id="shipFilterSummary" class="text-truncate">Filtre: Tüm tarihler</span><i class="bi bi-chevron-down ms-auto" id="shipFilterChev"></i>
+</button>
+<button class="btn btn-sm btn-dark text-nowrap flex-shrink-0" id="bulkDocBtn" onclick="busy(this, openBulkDocs)"><i class="bi bi-files me-1"></i>Toplu Belge</button>
+</div>
+<div id="shipFilterCard" class="filter-card mb-2 d-none">
+<div class="quick-range d-flex flex-wrap gap-1 mb-2">
+<button class="btn btn-outline-secondary" onclick="setShipRange('today')">Bugün</button>
+<button class="btn btn-outline-secondary" onclick="setShipRange('week')">Bu Hafta</button>
+<button class="btn btn-outline-secondary" onclick="setShipRange('month')">Bu Ay</button>
+<button class="btn btn-outline-secondary" onclick="setShipRange('lastmonth')">Geçen Ay</button>
+<button class="btn btn-outline-secondary" onclick="setShipRange('year')">Bu Yıl</button>
+<button class="btn btn-outline-secondary" onclick="setShipRange('all')">Tümü</button>
+</div>
+<div class="row g-2">
+<div class="col-6"><label class="small-label">Başlangıç</label><input type="date" id="shipFrom" class="form-control form-control-sm" onchange="shipFiltersChanged()"></div>
+<div class="col-6"><label class="small-label">Bitiş</label><input type="date" id="shipTo" class="form-control form-control-sm" onchange="shipFiltersChanged()"></div>
+<div class="col-12"><label class="small-label">Tarih Türü</label>
+<select id="shipDateType" class="form-select form-select-sm" onchange="shipFiltersChanged()">
+<option value="created">Bildirim tarihine göre</option>
+<option value="approved">Teslim tarihine göre</option>
+</select></div>
+<div class="col-12 admin-only d-none" id="shipFirmWrap"><label class="small-label">Firma</label>
+<select id="shipFirm" class="form-select form-select-sm" onchange="shipFiltersChanged()"></select></div>
+<div class="col-12"><label class="small-label">Ürün</label>
+<select id="shipProduct" class="form-select form-select-sm" onchange="shipFiltersChanged()"></select></div>
+</div>
+<button class="btn btn-sm btn-link text-danger px-0 mt-2" onclick="clearShipFilters()"><i class="bi bi-x-circle me-1"></i>Filtreleri temizle</button>
+</div>
+<div class="btn-group w-100 mb-3" id="shipFilterGroup">
+<button class="btn btn-sm btn-outline-dark active" data-f="all" onclick="setShipFilter('all')">Tümü</button>
+<button class="btn btn-sm btn-outline-dark" data-f="pending" onclick="setShipFilter('pending')">Onay Bekleyen</button>
+<button class="btn btn-sm btn-outline-dark" data-f="approved" onclick="setShipFilter('approved')">Teslim Alınan</button>
+</div>
+<div id="shipmentList" class="vstack gap-2"></div>
+<div id="shipPager"></div>
+</section>
+<section id="tabStok" class="d-none">
+<div class="d-flex justify-content-between align-items-center mb-2 px-1">
+<span class="section-title" id="stockTitle">Kalan Alacaklar</span>
+<span class="text-secondary tiny">Kaleme dokunun → hareketler</span>
+</div>
+<div id="stockList" class="mb-4"></div>
+<div class="card p-3 mb-3 admin-only d-none">
+<div class="section-title mb-3"><i class="bi bi-plus-slash-minus me-1"></i>Alacak Ekle / Düş</div>
+<select id="adjProduct" class="form-select mb-2"></select>
+<div class="btn-group w-100 mb-2" role="group">
+<input type="radio" class="btn-check" name="adjType" id="adjAdd" value="1" checked>
+<label class="btn btn-outline-success" for="adjAdd"><i class="bi bi-plus-lg"></i> Alacak Ekle</label>
+<input type="radio" class="btn-check" name="adjType" id="adjSub" value="-1">
+<label class="btn btn-outline-danger" for="adjSub"><i class="bi bi-dash-lg"></i> Alacak Düş</label>
+</div>
+<input type="number" id="adjQty" class="form-control mb-2" placeholder="Miktar (Litre)" inputmode="decimal">
+<input type="text" id="adjNote" class="form-control mb-1" placeholder="Açıklama (ör. fatura no, ödeme, düzeltme sebebi)">
+<div class="form-text mb-3">Firmadan yeni alım yaptığınızda <b>Alacak Ekle</b>. Sevkiyatları teslim aldığınızda alacak kendiliğinden düşer.</div>
+<button onclick="busy(this, processAdjust)" class="btn btn-dark w-100">Kaydet</button>
+</div>
+<div class="card p-3 admin-only d-none">
+<div class="section-title mb-3"><i class="bi bi-plus-square me-1"></i>Firmaya Alacak Kalemi Ekle</div>
+<label class="small-label">Firma</label>
+<select id="newAllowedBayi" class="form-select mb-2" onchange="fillNewCatalog()"></select>
+<label class="small-label">Ürün <span class="text-secondary">(Ürünler listesinden)</span></label>
+<select id="newCatalog" class="form-select mb-2"></select>
+<div class="row g-2 mb-1">
+<div class="col-6">
+<label class="small-label">Başlangıç Alacağı (Litre)</label>
+<input type="number" id="newOpening" class="form-control" placeholder="0" inputmode="decimal">
+</div>
+<div class="col-6">
+<label class="small-label">"Az kaldı" Uyarısı (Litre)</label>
+<input type="number" id="newCritical" class="form-control" placeholder="0" inputmode="decimal">
+</div>
+</div>
+<div class="form-text mb-3">Başlangıç alacağı: bu firmadan şu an teslim almayı beklediğiniz miktar. Uyarı: kalan bu miktarın altına inince kalem sarı görünür (0 = uyarı yok).</div>
+<button onclick="busy(this, addNewProduct)" class="btn btn-dark w-100"><i class="bi bi-plus-lg me-1"></i>Kalemi Kaydet</button>
+</div>
+</section>
+<section id="tabSevkEt" class="d-none">
+<div class="card p-3">
+<div class="section-title mb-3">Sevkiyat Bildir</div>
+<div id="sevkOrderBanner" class="order-banner small mb-3 d-none"></div>
+<label class="small-label">İrsaliye / Sevkiyat No</label>
+<input type="text" id="sevkNo" class="form-control mb-2" placeholder="IRS-2026-001">
+<label class="small-label">İrsaliyeyi Düzenleyen</label>
+<div id="sevkPerson" class="mb-3"></div>
+<div class="d-flex justify-content-between align-items-center mb-2">
+<span class="small-label mb-0">Gönderilen Ürünler (Litre)</span>
+<span class="tiny text-secondary" id="sevkTotal"></span>
+</div>
+<div id="sevkItems" class="mb-3"></div>
+<label class="small-label">Teslim Eden İmzası</label>
+<div class="sig-wrap"><canvas id="sevkSigCanvas" class="sig-canvas"></canvas></div>
+<div class="text-end mb-2"><button class="btn btn-link btn-sm px-0" onclick="sevkPad && sevkPad.clear()">İmzayı temizle</button></div>
+<button onclick="busy(this, createShipment)" class="btn btn-dark w-100"><i class="bi bi-send me-1"></i>İmzala & Sevkiyatı Bildir</button>
+<div class="text-secondary tiny mt-2 text-center">İmzanız teslimat belgesinde "Teslim Eden" alanında yer alır. Yıldız Kumlama Boya teslim alana kadar Sevkiyatlar ekranından düzenleyebilir veya silebilirsiniz.</div>
+</div>
+</section>
+<section id="tabSiparis" class="d-none">
+<div class="card p-3 mb-3 admin-only d-none">
+<div class="section-title mb-3"><i class="bi bi-clipboard-plus me-1"></i>Yeni Sipariş</div>
+<label class="small-label">Firma</label>
+<select id="ordBayi" class="form-select mb-2" onchange="resetOrderForm()"></select>
+<label class="small-label">Ürünler (Litre)</label>
+<div id="ordItems" class="mb-2"></div>
+<div class="row g-2 mb-3">
+<div class="col-6">
+<label class="small-label">Termin (isteğe bağlı)</label>
+<input type="date" id="ordDue" class="form-control">
+</div>
+<div class="col-6">
+<label class="small-label">Not (isteğe bağlı)</label>
+<input id="ordNote" class="form-control" placeholder="ör. acil">
+</div>
+</div>
+<button class="btn btn-dark w-100" onclick="busy(this, createOrder)"><i class="bi bi-send me-1"></i>Siparişi Gönder</button>
+</div>
+<div class="d-flex justify-content-between align-items-center mb-2 px-1">
+<span class="section-title" id="orderTitle">Siparişler</span>
+<span class="badge text-bg-light border" id="orderCount"></span>
+</div>
+<div class="btn-group w-100 mb-3" id="orderFilterGroup">
+<button class="btn btn-sm btn-outline-dark active" data-f="open" onclick="setOrderFilter('open')">Açık</button>
+<button class="btn btn-sm btn-outline-dark" data-f="converted" onclick="setOrderFilter('converted')">Sevkiyata Dönen</button>
+<button class="btn btn-sm btn-outline-dark" data-f="cancelled" onclick="setOrderFilter('cancelled')">İptal</button>
+<button class="btn btn-sm btn-outline-dark" data-f="all" onclick="setOrderFilter('all')">Tümü</button>
+</div>
+<div id="orderList" class="vstack gap-2"></div>
+<div id="orderPager"></div>
+</section>
+<section id="tabUrun" class="d-none">
+<div class="card p-3 mb-3">
+<div class="section-title mb-3"><i class="bi bi-plus-circle me-1"></i>Yeni Ürün</div>
+<div class="row g-2 mb-1">
+<div class="col-4">
+<label class="small-label">Kod</label>
+<input id="catCode" class="form-control" placeholder="EP-01">
+</div>
+<div class="col-8">
+<label class="small-label">Ürün Adı</label>
+<input id="catName" class="form-control" placeholder="Epoksi Astar Gri" onkeydown="if(event.key==='Enter')$('catAddBtn').click()">
+</div>
+</div>
+<div class="form-text mb-3">Tüm ürünler <b>Litre</b> bazında takip edilir. Eklediğiniz ürünü Alacaklar ekranından firmalara atarsınız.</div>
+<button id="catAddBtn" class="btn btn-dark w-100" onclick="busy(this, addCatalog)"><i class="bi bi-plus-lg me-1"></i>Ürünü Ekle</button>
+</div>
+<div class="d-flex justify-content-between align-items-center mb-2 px-1">
+<span class="section-title">Ürün Listesi</span>
+<span class="badge text-bg-light border" id="catCount"></span>
+</div>
+<input id="catSearch" class="form-control mb-2" placeholder="Ara: kod veya ürün adı" oninput="renderCatalog()">
+<div id="catalogList" class="vstack gap-2"></div>
+</section>
+<section id="tabRapor" class="d-none">
+<div class="card p-3 mb-3">
+<div class="section-title mb-3"><i class="bi bi-funnel me-1"></i>Rapor Filtresi</div>
+<div class="admin-only d-none">
+<label class="small-label">Firma</label>
+<select id="repBayiSel" class="form-select mb-2" onchange="fillRepProducts(); loadReport()"></select>
+</div>
+<label class="small-label">Kalem</label>
+<select id="repProduct" class="form-select mb-2" onchange="loadReport()"></select>
+<div class="row g-2 mb-2">
+<div class="col-6">
+<label class="small-label">Başlangıç</label>
+<input type="date" id="repFrom" class="form-control" onchange="loadReport()">
+</div>
+<div class="col-6">
+<label class="small-label">Bitiş</label>
+<input type="date" id="repTo" class="form-control" onchange="loadReport()">
+</div>
+</div>
+<div class="d-flex gap-1 mb-2">
+<button class="btn btn-sm btn-light border flex-fill" onclick="setRange('today')">Bugün</button>
+<button class="btn btn-sm btn-light border flex-fill" onclick="setRange('month')">Bu Ay</button>
+<button class="btn btn-sm btn-light border flex-fill" onclick="setRange('lastmonth')">Geçen Ay</button>
+<button class="btn btn-sm btn-light border flex-fill" onclick="setRange('year')">Bu Yıl</button>
+</div>
+<label class="small-label">Hareket Türü</label>
+<select id="repType" class="form-select mb-3" onchange="loadReport()">
+<option value="">Tümü</option>
+<option>Sevkiyat Teslimi</option>
+<option>Alacak Girişi</option>
+<option>Alacak Düşümü</option>
+<option>Açılış Alacağı</option>
+<option>Düzeltme</option>
+<option>Onay İptali</option>
+<option>Sevkiyat İptali</option>
+</select>
+<button class="btn btn-outline-dark w-100" onclick="busy(this, openStatement)"><i class="bi bi-journal-check me-1"></i>Mutabakat Ekstresi (Yazdır)</button>
+<div class="form-text admin-only d-none">Mutabakat için yukarıdan firma seçin; seçili tarih aralığı kullanılır.</div>
+</div>
+<div id="repSummary" class="mb-3"></div>
+<div class="card p-3 mb-3">
+<div class="d-flex justify-content-between align-items-center mb-2">
+<span class="section-title">Alacak Hareketleri <span id="repCount" class="text-secondary"></span></span>
+<button class="btn btn-sm btn-outline-dark" onclick="exportCsv()"><i class="bi bi-file-earmark-spreadsheet"></i> Excel</button>
+</div>
+<div id="repMoves"></div>
+<div id="movesPager"></div>
+</div>
+<div class="card p-3">
+<div class="section-title mb-2">Sevkiyat Özeti</div>
+<div id="repBayi"></div>
+</div>
+</section>
+<section id="tabAyarlar" class="d-none">
+<div class="card p-3 mb-3">
+<div class="section-title mb-3"><i class="bi bi-key me-1"></i>Şifremi Değiştir</div>
+<label class="small-label">Mevcut Şifre</label>
+<input type="password" id="pwOld" class="form-control mb-2" autocomplete="current-password">
+<label class="small-label">Yeni Şifre</label>
+<input type="password" id="pwNew" class="form-control mb-2" autocomplete="new-password">
+<label class="small-label">Yeni Şifre (Tekrar)</label>
+<input type="password" id="pwNew2" class="form-control mb-3" autocomplete="new-password">
+<button onclick="busy(this, changeOwnPassword)" class="btn btn-dark w-100">Şifreyi Güncelle</button>
+</div>
+<div class="card p-3 mb-3 admin-only d-none">
+<div class="d-flex justify-content-between align-items-center mb-3">
+<span class="section-title"><i class="bi bi-people me-1"></i>Firma Hesapları</span>
+<button onclick="openBayiModal()" class="btn btn-sm btn-outline-dark"><i class="bi bi-plus-lg"></i> Yeni Firma</button>
+</div>
+<div id="bayiList" class="vstack gap-2"></div>
+</div>
+<div class="card p-3 mb-3 admin-only d-none">
+<div class="section-title mb-2"><i class="bi bi-person-badge me-1"></i>Personel Listesi</div>
+<p class="text-secondary small mb-2">Firma personeli "İrsaliyeyi Düzenleyen", sizin personeliniz "Teslim Alan" seçiminde listelenir. Listede olmayan kişi adını elle de yazabilir.</p>
+<select id="perFirm" class="form-select mb-2" onchange="renderPersonnel()"></select>
+<div class="input-group mb-2">
+<input id="perName" class="form-control" placeholder="Ad Soyad" onkeydown="if(event.key==='Enter')$('perAddBtn').click()">
+<button id="perAddBtn" class="btn btn-dark" onclick="busy(this, addPersonnel)"><i class="bi bi-plus-lg"></i> Ekle</button>
+</div>
+<div id="perList" class="vstack gap-1"></div>
+</div>
+<div class="card p-3 admin-only d-none">
+<div class="section-title mb-2"><i class="bi bi-cloud-check me-1"></i>Yedekleme</div>
+<p class="text-secondary small mb-3">Her gün yöneticinin ilk girişinde otomatik yedek alınır. Manuel yedekler siz silene kadar kalır.</p>
+<div class="input-group mb-2">
+<input id="backupNote" class="form-control" placeholder="Yedek notu (isteğe bağlı)">
+<button class="btn btn-dark" onclick="busy(this, createBackup)"><i class="bi bi-cloud-plus"></i> Yedek Al</button>
+</div>
+<label class="btn btn-outline-secondary w-100 mb-3">
+<i class="bi bi-upload me-1"></i>Dosyadan Geri Yükle (.json)
+<input type="file" accept=".json,application/json" hidden onchange="restoreFromFile(this)">
+</label>
+<div id="backupList" class="vstack gap-2"></div>
+</div>
+</section>
+</div>
+</main>
+<nav id="bottomNav" class="bottom-nav d-none">
+<div class="d-flex mx-auto" style="max-width:600px">
+<button id="btn-tabOnay" class="active" onclick="switchTab('tabOnay')"><i class="bi bi-truck"></i>Sevkiyat</button>
+<button id="btn-tabSiparis" onclick="switchTab('tabSiparis')"><i class="bi bi-clipboard-check"></i>Sipariş<span id="navOrderBadge" class="nav-badge d-none"></span></button>
+<button id="btn-tabStok" onclick="switchTab('tabStok')"><i class="bi bi-wallet2"></i><span id="navStokLabel">Alacak</span></button>
+<button id="btn-tabSevkEt" class="d-none" onclick="switchTab('tabSevkEt')"><i class="bi bi-send"></i>Sevk Bildir</button>
+<button id="btn-tabUrun" class="d-none" onclick="switchTab('tabUrun')"><i class="bi bi-list-ul"></i>Ürünler</button>
+<button id="btn-tabRapor" onclick="switchTab('tabRapor')"><i class="bi bi-bar-chart"></i>Rapor</button>
+<button id="btn-tabAyarlar" onclick="switchTab('tabAyarlar')"><i class="bi bi-gear"></i>Ayarlar</button>
+</div>
+</nav>
+<div class="modal fade" id="approveModal" tabindex="-1">
+<div class="modal-dialog modal-dialog-centered modal-dialog-scrollable">
+<div class="modal-content rounded-4">
+<div class="modal-header border-0 pb-0">
+<div>
+<h6 class="modal-title fw-semibold">Teslim Al & İmzala</h6>
+<div class="text-secondary small" id="apvInfo"></div>
+</div>
+<button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+</div>
+<div class="modal-body">
+<div class="small-label">Gelen miktarları kontrol edin. Eksik veya hasarlı ise <b>gerçekte gelen</b> miktarı yazın; alacaktan sadece o kadar düşer.</div>
+<div id="apvItems" class="mb-2"></div>
+<label class="small-label">Teslim Alan</label>
+<div id="apvPerson" class="mb-2"></div>
+<input id="apvNote" class="form-control mb-3" placeholder="Genel not (isteğe bağlı)">
+<label class="small-label">Teslim Alan İmzası</label>
+<div class="sig-wrap"><canvas id="signatureCanvas" class="sig-canvas"></canvas></div>
+<div class="text-end"><button class="btn btn-link btn-sm px-0" onclick="signaturePad && signaturePad.clear()">İmzayı temizle</button></div>
+</div>
+<div class="modal-footer border-0 pt-0">
+<button onclick="busy(this, confirmApproval)" class="btn btn-success w-100">Onayla & Alacaktan Düş</button>
+</div>
+</div>
+</div>
+</div>
+<div class="modal fade" id="detailModal" tabindex="-1">
+<div class="modal-dialog modal-dialog-centered modal-dialog-scrollable">
+<div class="modal-content rounded-4">
+<div class="modal-header border-0 pb-0">
+<h6 class="modal-title fw-semibold">Sevkiyat Detayı</h6>
+<button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+</div>
+<div class="modal-body" id="detailBody"></div>
+<div class="modal-footer border-0 pt-0">
+<div class="d-flex flex-column gap-2 w-100" id="detailActions"></div>
+</div>
+</div>
+</div>
+</div>
+<div class="modal fade" id="editModal" tabindex="-1">
+<div class="modal-dialog modal-dialog-centered modal-dialog-scrollable">
+<div class="modal-content rounded-4">
+<div class="modal-header border-0 pb-0">
+<h6 class="modal-title fw-semibold">Sevkiyatı Düzenle</h6>
+<button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+</div>
+<div class="modal-body">
+<div id="editWarn" class="alert alert-warning small py-2 d-none">
+<i class="bi bi-exclamation-triangle me-1"></i>Bu sevkiyat teslim alınmış. "Teslim alınan" miktarlardaki değişiklik alacağa otomatik yansır.
+</div>
+<div class="text-secondary small mb-2" id="editSupplier"></div>
+<label class="small-label">İrsaliye / Sevkiyat No</label>
+<input id="editNo" class="form-control mb-2">
+<label class="small-label">İrsaliyeyi Düzenleyen</label>
+<div id="editPerson" class="mb-3"></div>
+<label class="small-label">Ürünler (Litre)</label>
+<div id="editItems"></div>
+</div>
+<div class="modal-footer border-0 pt-0">
+<button class="btn btn-dark w-100" onclick="busy(this, saveEdit)">Değişiklikleri Kaydet</button>
+</div>
+</div>
+</div>
+</div>
+<div class="modal fade" id="orderModal" tabindex="-1">
+<div class="modal-dialog modal-dialog-centered modal-dialog-scrollable">
+<div class="modal-content rounded-4">
+<div class="modal-header border-0 pb-0">
+<h6 class="modal-title fw-semibold" id="ordEditTitle">Siparişi Düzenle</h6>
+<button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+</div>
+<div class="modal-body">
+<div class="text-secondary small mb-2" id="ordEditBayi"></div>
+<label class="small-label">Ürünler (Litre)</label>
+<div id="ordEditItems" class="mb-2"></div>
+<div class="row g-2">
+<div class="col-6"><label class="small-label">Termin</label><input type="date" id="ordEditDue" class="form-control"></div>
+<div class="col-6"><label class="small-label">Not</label><input id="ordEditNote" class="form-control"></div>
+</div>
+</div>
+<div class="modal-footer border-0 pt-0">
+<button class="btn btn-dark w-100" onclick="busy(this, saveOrderEdit)">Kaydet</button>
+</div>
+</div>
+</div>
+</div>
+<div class="modal fade" id="sevkConfirmModal" tabindex="-1" data-bs-backdrop="static">
+<div class="modal-dialog modal-dialog-centered modal-dialog-scrollable">
+<div class="modal-content rounded-4">
+<div class="modal-header border-0 pb-0">
+<div>
+<h6 class="modal-title fw-semibold">Sevkiyatı Kontrol Edin</h6>
+<div class="text-secondary small">Bilgiler doğruysa onaylayın; değilse geri dönüp düzeltin.</div>
+</div>
+</div>
+<div class="modal-body" id="sevkConfirmBody"></div>
+<div class="modal-footer border-0 pt-0">
+<div class="d-flex gap-2 w-100">
+<button class="btn btn-light border flex-fill" data-bs-dismiss="modal"><i class="bi bi-arrow-left me-1"></i>Geri Dön</button>
+<button class="btn btn-success flex-fill" onclick="busy(this, submitShipment)"><i class="bi bi-check2-circle me-1"></i>Onayla & Gönder</button>
+</div>
+</div>
+</div>
+</div>
+</div>
+<div class="modal fade" id="productModal" tabindex="-1">
+<div class="modal-dialog modal-dialog-centered">
+<div class="modal-content rounded-4">
+<div class="modal-header border-0 pb-0">
+<h6 class="modal-title fw-semibold">Alacak Kalemi</h6>
+<button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+</div>
+<div class="modal-body">
+<div class="fw-semibold" id="peName"></div>
+<div class="text-secondary small mb-3" id="peBayi"></div>
+<label class="small-label">"Az kaldı" Uyarısı (Litre)</label>
+<input id="peCritical" type="number" inputmode="decimal" class="form-control">
+<div class="form-text">Ürün adı ve kodu Ürünler ekranından değiştirilir. Miktar için "Alacak Ekle / Düş" kullanın; böylece her değişiklik kayıt altında kalır.</div>
+</div>
+<div class="modal-footer border-0 pt-0">
+<div class="d-flex gap-2 w-100">
+<button class="btn btn-outline-danger" onclick="busy(this, deleteProduct)"><i class="bi bi-trash me-1"></i>Kalemi Sil</button>
+<button class="btn btn-dark flex-fill" onclick="busy(this, saveProductEdit)">Kaydet</button>
+</div>
+</div>
+</div>
+</div>
+</div>
+<div class="modal fade" id="catModal" tabindex="-1">
+<div class="modal-dialog modal-dialog-centered">
+<div class="modal-content rounded-4">
+<div class="modal-header border-0 pb-0">
+<h6 class="modal-title fw-semibold">Ürünü Düzenle</h6>
+<button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+</div>
+<div class="modal-body">
+<div class="row g-2">
+<div class="col-4"><label class="small-label">Kod</label><input id="catEditCode" class="form-control"></div>
+<div class="col-8"><label class="small-label">Ürün Adı</label><input id="catEditName" class="form-control"></div>
+</div>
+<div class="form-text" id="catEditUsage"></div>
+</div>
+<div class="modal-footer border-0 pt-0">
+<div class="d-flex gap-2 w-100">
+<button class="btn btn-outline-danger" onclick="busy(this, () => deleteCatalog(editingCat.id, true))"><i class="bi bi-trash me-1"></i>Sil</button>
+<button class="btn btn-dark flex-fill" onclick="busy(this, saveCatEdit)">Kaydet</button>
+</div>
+</div>
+</div>
+</div>
+</div>
+<div class="modal fade" id="bayiModal" tabindex="-1">
+<div class="modal-dialog modal-dialog-centered">
+<div class="modal-content rounded-4">
+<div class="modal-header border-0 pb-0">
+<h6 class="modal-title fw-semibold" id="bayiModalTitle">Yeni Firma</h6>
+<button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+</div>
+<div class="modal-body">
+<label class="small-label">Firma Adı</label>
+<input type="text" id="bayiName" class="form-control" autocomplete="off">
+<div class="form-text mb-3" id="bayiNameHint">Bu ad sevkiyat ve alacak kayıtlarında kullanılır, sonradan değiştirilemez.</div>
+<label class="small-label">Giriş Şifresi</label>
+<input type="text" id="bayiPass" class="form-control" placeholder="En az 4 karakter" autocomplete="off">
+</div>
+<div class="modal-footer border-0 pt-0">
+<button onclick="busy(this, saveBayi)" class="btn btn-dark w-100">Kaydet</button>
+</div>
+</div>
+</div>
+</div>
+<div id="docView" class="d-none">
+<div class="doc-toolbar no-print">
+<button class="btn btn-light border" onclick="closeDoc()"><i class="bi bi-arrow-left me-1"></i>Geri</button>
+<button class="btn btn-dark" onclick="window.print()"><i class="bi bi-printer me-1"></i>Yazdır / PDF Kaydet</button>
+</div>
+<div class="doc-page" id="docPage"></div>
+</div>
+<div class="toast-container position-fixed top-0 start-50 translate-middle-x p-3" style="z-index:2100">
+<div id="appToast" class="toast align-items-center border-0" role="alert">
+<div class="d-flex">
+<div class="toast-body" id="toastMsg"></div>
+<button type="button" class="btn-close me-2 m-auto" data-bs-dismiss="toast"></button>
+</div>
+</div>
+</div>
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+<script src="logos.js"></script>
+<script src="app1.js"></script>
+<script src="app2.js"></script>
+<script src="app3.js"></script>
+</body>
+</html>
