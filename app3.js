@@ -390,11 +390,17 @@ if (DEMO && !location.protocol.startsWith('http')) $('loginSection').insertAdjac
 Portal dosyadan açıldı. Bazı telefonlarda dosya her açılışta farklı adresle açılır ve önceki kayıtlar görünmez.
 Kayıtların kalıcı olması için portalı internet adresinden açıp "Ana ekrana ekle" yapın (KURULUM.txt).
 Bu arada Ayarlar &gt; Yedekleme'den düzenli yedek indirin.</div>`);
-loadLogins().then(() => {
-const saved = sessionGet();
-if (saved && !me) {
-if ([...$('loginRole').options].some(o => o.value === saved.name)) $('loginRole').value = saved.name;
-login(saved);
+const savedSession = sessionGet();
+if (savedSession) {
+$('loginSection').classList.add('d-none');
+$('bootLoading').classList.remove('d-none');
+login(savedSession).catch(() => {}).finally(() => {
+$('bootLoading').classList.add('d-none');
+if (!me) $('loginSection').classList.remove('d-none');
+});
 }
+loadLogins().then(() => {
+const s = sessionGet();
+if (s && !me && [...$('loginRole').options].some(o => o.value === s.name)) $('loginRole').value = s.name;
 });
 if ('serviceWorker' in navigator && location.protocol.startsWith('http')) navigator.serviceWorker.register('sw.js');

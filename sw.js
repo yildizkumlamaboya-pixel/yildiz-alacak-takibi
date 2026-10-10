@@ -1,6 +1,6 @@
-const CACHE = 'yildiz-alacak-web-v1';
+const CACHE = 'yildiz-alacak-web-v2';
 const ASSETS = ['./', './index.html', './config.js', './logos.js', './app1.js', './app2.js', './app3.js', './manifest.json',
-  './logo-yildiz.png', './logo-delta.webp', './logo-minimar.webp',
+  './logo-yildiz.webp', './logo-delta.webp', './logo-minimar.webp',
   './icon-192.png', './icon-512.png', './icon-maskable-512.png', './apple-touch-icon.png'];
 self.addEventListener('install', e => { e.waitUntil(caches.open(CACHE).then(c => c.addAll(ASSETS))); self.skipWaiting(); });
 self.addEventListener('activate', e => {

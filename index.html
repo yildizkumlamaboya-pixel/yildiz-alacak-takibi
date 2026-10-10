@@ -130,6 +130,9 @@ body > *:not(#docView) { display: none !important; }
 </div>
 <button id="loginBtn" onclick="busy(this, () => login())" class="btn btn-dark w-100 py-2">Giriş Yap</button>
 </section>
+<div id="bootLoading" class="text-center text-secondary py-5 d-none">
+<div class="spinner-border spinner-border-sm"></div><div class="small mt-2">Oturum açılıyor...</div>
+</div>
 <div id="appSection" class="d-none">
 <section id="tabOnay">
 <div id="homeHero"></div>
