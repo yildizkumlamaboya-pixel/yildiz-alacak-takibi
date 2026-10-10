@@ -72,7 +72,18 @@ return null;
 }
 return { data };
 }
+const ANDROID = () => typeof window.AndroidBridge === 'object' && window.AndroidBridge;
+function printDoc() {
+if (ANDROID()) { try { window.AndroidBridge.print(document.title); return; } catch (e) { /* tarayıcı yazdırmasına düş */ } }
+window.print();
+}
 function download(content, filename, type) {
+if (ANDROID()) {
+try {
+const b64 = btoa(unescape(encodeURIComponent(content)));
+if (window.AndroidBridge.saveFile(filename, b64, (type || 'application/octet-stream').split(';')[0])) return;
+} catch (e) { /* normal indirmeye düş */ }
+}
 const blob = new Blob([content], { type });
 const a = document.createElement('a');
 a.href = URL.createObjectURL(blob); a.download = filename;

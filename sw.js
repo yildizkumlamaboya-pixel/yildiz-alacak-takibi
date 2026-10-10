@@ -1,4 +1,4 @@
-const CACHE = 'yildiz-alacak-web-v7';
+const CACHE = 'yildiz-alacak-web-v8';
 const ASSETS = ['./', './index.html', './config.js', './logos.js', './app1.js', './app2.js', './app3.js', './manifest.json',
   './logo-yildiz.webp', './logo-delta.webp', './logo-minimar.webp',
   './icon-192.png', './icon-512.png', './icon-maskable-512.png', './apple-touch-icon.png'];

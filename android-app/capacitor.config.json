@@ -1,0 +1,13 @@
+{
+  "appId": "com.yildizkumlama.alacak",
+  "appName": "Yıldız Alacak",
+  "webDir": "www",
+  "server": {
+    "url": "https://yildiz-alacak-takibi.vercel.app",
+    "cleartext": false
+  },
+  "android": {
+    "allowMixedContent": false,
+    "backgroundColor": "#ffffff"
+  }
+}
