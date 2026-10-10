@@ -1,3 +1,39 @@
+async function createShipment() {
+const no = $('sevkNo').value.trim();
+if (!no) return notify('İrsaliye numarasını giriniz.', 'warning');
+const person = readPerson('sevkPerson');
+if (!person) return notify('İrsaliyeyi düzenleyen kişiyi seçin veya yazın.', 'warning');
+const items = readItems('sevkItems');
+if (!items) return;
+if (!sevkPad || sevkPad.isEmpty()) return notify('Lütfen teslim eden olarak imzalayınız.', 'warning');
+pendingSevk = { no, person, items, signature: sevkPad.toDataURL('image/png'), orderId: convertingOrder ? convertingOrder.id : null };
+const o = convertingOrder;
+const total = r2(items.reduce((a, i) => a + i.qty, 0));
+const row = (k, v) => `<div class="d-flex justify-content-between border-bottom py-2 small"><span class="text-secondary">${k}</span><span class="fw-semibold text-end ms-3">${v}</span></div>`;
+$('sevkConfirmBody').innerHTML = `
+${row('Gönderen', esc(me.name))}
+${row('İrsaliye No', '#' + esc(no))}
+${o ? row('Sipariş', orderNo(o)) : ''}
+${row('İrsaliyeyi Düzenleyen', esc(person))}
+<table class="table table-sm align-middle mt-2 mb-1">
+<thead><tr><th>Ürün</th>${o ? '<th class="text-end">Sipariş</th>' : ''}<th class="text-end">Gönderilen</th></tr></thead>
+<tbody>${items.map(i => {
+const p = prodById(i.product_id) || {};
+const oi = o ? o.items.find(x => x.product_id === i.product_id) : null;
+const diff = o && (!oi || oi.qty !== i.qty);
+return `<tr><td>${esc(p.name)}</td>${o ? `<td class="text-end text-secondary">${oi ? num(oi.qty) + ' L' : '-'}</td>` : ''}
+<td class="text-end fw-bold ${diff ? 'diff' : ''}">${num(i.qty)} L</td></tr>`;
+}).join('')}
+${o ? o.items.filter(oi => !items.some(i => i.product_id === oi.product_id)).map(oi =>
+`<tr><td>${esc(oi.product_name)}</td><td class="text-end text-secondary">${num(oi.qty)} L</td><td class="text-end diff">gönderilmiyor</td></tr>`).join('') : ''}
+</tbody>
+<tfoot><tr><td class="fw-semibold">Toplam</td>${o ? `<td class="text-end text-secondary">${num(o.items.reduce((a, i) => a + i.qty, 0))} L</td>` : ''}<td class="text-end fw-bold">${num(total)} L</td></tr></tfoot>
+</table>
+<div class="small-label mt-2">Teslim Eden İmzası</div>
+<img src="${pendingSevk.signature}" class="w-100 border rounded-3 bg-white" style="height:110px;object-fit:contain">
+<div class="tiny text-secondary mt-2"><i class="bi bi-info-circle"></i> "Onayla & Gönder" dediğinizde sevkiyat Yıldız Kumlama Boya'ya iletilir. Teslim alınana kadar düzenleyebilir veya silebilirsiniz.</div>`;
+sevkConfirmModal.show();
+}
 async function submitShipment() {
 if (!pendingSevk) return;
 const p = pendingSevk;
@@ -370,6 +406,7 @@ if (isAdmin()) {
 keep('adjProduct', productOptions(products, true) || '<option value="">Önce alacak kalemi ekleyin</option>');
 keep('repBayiSel', `<option value="">Tüm Firmalar</option>` + bayiNames().map(n => `<option value="${esc(n)}">${esc(n)}</option>`).join(''));
 const firms = [me.name, ...bayiNames()];
+keep('audFirm', '<option value="">Tüm firmalar ve işlemler</option>' + bayiNames().map(n => `<option value="${esc(n)}">${esc(n)}</option>`).join(''));
 keep('perFirm', firms.map(f => `<option value="${esc(f)}">${esc(f)}${f === me.name ? ' (teslim alanlar)' : ''}</option>`).join(''));
 const ob = $('ordBayi').value;
 keep('ordBayi', bayiNames().map(n => `<option value="${esc(n)}">${esc(n)}</option>`).join('') || '<option value="">Önce firma ekleyin</option>');
@@ -543,110 +580,4 @@ if (reload) loadReport();
 const reportProducts = () => {
 const b = isAdmin() ? $('repBayiSel').value : '';
 return visibleProducts().filter(p => !b || p.allowed_bayi === b);
-};
-function fillRepProducts() {
-const el = $('repProduct'), cur = el.value;
-const withBayi = isAdmin() && !$('repBayiSel').value;
-el.innerHTML = `<option value="">Tüm Kalemler</option>` +
-sortProducts(reportProducts()).map(p => `<option value="${p.id}">${esc((withBayi ? p.allowed_bayi + ' • ' : '') + p.name)}</option>`).join('');
-if ([...el.options].some(o => o.value === cur)) el.value = cur;
-}
-function openProductReport(id) {
-if (isAdmin()) $('repBayiSel').value = '';
-fillRepProducts();
-$('repProduct').value = String(id);
-switchTab('tabRapor');
-}
-function rangeIso() {
-const from = $('repFrom').value, to = $('repTo').value;
-const f = from ? new Date(from + 'T00:00:00') : null;
-let t = null;
-if (to) { t = new Date(to + 'T00:00:00'); t.setDate(t.getDate() + 1); }
-return { f, t };
-}
-async function loadReport() {
-if (!me) return;
-if (!reportProducts().length) { reportMoves = []; pages.moves = 1; return renderReport(); }
-const { f, t } = rangeIso();
-$('repMoves').innerHTML = `<div class="text-center text-secondary small py-3"><div class="spinner-border spinner-border-sm"></div></div>`;
-const r = await rpc('portal_movements', {
-p_from: f ? f.toISOString() : null, p_to: t ? t.toISOString() : null,
-p_bayi: isAdmin() ? ($('repBayiSel').value || null) : null,
-p_product_id: $('repProduct').value ? Number($('repProduct').value) : null,
-p_type: $('repType').value || null, p_shipment_id: null
-});
-reportMoves = r ? (r.data || []).map(m => ({ ...m, qty: Number(m.qty), balance_after: Number(m.balance_after) })) : [];
-pages.moves = 1;
-renderReport();
-}
-function renderReport() {
-const pid = $('repProduct').value;
-const sumUp = arr => r2(arr.filter(m => ['Açılış Alacağı', 'Alacak Girişi'].includes(m.movement_type)).reduce((a, m) => a + m.qty, 0));
-const delivered = arr => r2(arr.filter(m => m.movement_type === 'Sevkiyat Teslimi').reduce((a, m) => a - m.qty, 0));
-if (pid) {
-const p = prodById(Number(pid)) || {};
-const st = balanceState(p);
-$('repSummary').innerHTML = `
-<div class="small fw-semibold mb-2 px-1">${esc(p.allowed_bayi)} • ${esc(p.name)}</div>
-<div class="row g-2">
-<div class="col-6"><div class="stat"><div class="tiny text-secondary">Eklenen Alacak</div><div class="v text-primary">+${num(sumUp(reportMoves))} L</div></div></div>
-<div class="col-6"><div class="stat"><div class="tiny text-secondary">Teslim Alınan</div><div class="v text-success">${num(delivered(reportMoves))} L</div></div></div>
-<div class="col-6"><div class="stat"><div class="tiny text-secondary">Onay Bekleyen</div><div class="v text-warning-emphasis">${num(pendingQty(p.id))} L</div></div></div>
-<div class="col-6"><div class="stat"><div class="tiny text-secondary">Kalan Alacak (güncel)</div><div class="v ${st.txt}">${num(p.qty)} L</div></div></div>
-</div>`;
-} else {
-const rows = sortProducts(reportProducts()).map(p => {
-const ms = reportMoves.filter(m => m.product_id === p.id);
-return { p, up: sumUp(ms), del: delivered(ms) };
-});
-$('repSummary').innerHTML = !rows.length ? '' : `
-<div class="card p-3">
-<div class="section-title mb-2">Kalem Bazlı Özet <span class="text-secondary text-lowercase">(seçili tarih aralığı)</span></div>
-<div class="table-responsive">
-<table class="table table-sm align-middle mb-0">
-<thead><tr><th>Kalem</th><th class="text-end">Eklenen</th><th class="text-end">Teslim</th><th class="text-end">Kalan</th></tr></thead>
-<tbody>${rows.map(r => {
-const st = balanceState(r.p);
-return `<tr class="clickable" onclick="openProductReport(${r.p.id})">
-<td>${esc(r.p.name)}<div class="tiny text-secondary">${isAdmin() ? esc(r.p.allowed_bayi) + ' • ' : ''}${esc(r.p.code)}</div></td>
-<td class="text-end text-primary">${r.up ? '+' + num(r.up) : '-'}</td>
-<td class="text-end text-success">${r.del ? num(r.del) : '-'}</td>
-<td class="text-end fw-semibold ${st.txt}">${num(r.p.qty)} <span class="tiny text-secondary">L</span></td>
-</tr>`;
-}).join('')}</tbody>
-</table>
-</div>
-</div>`;
-}
-renderMovesList();
-const { f, t } = rangeIso();
-const ids = new Set(reportProducts().map(p => p.id));
-const groups = {};
-shipments.filter(s => { const d = new Date(s.created_at); return (!f || d >= f) && (!t || d < t); }).forEach(s => {
-s.items.filter(i => ids.has(i.product_id) && (!pid || i.product_id === Number(pid))).forEach(i => {
-const k = s.supplier + '||' + i.product_name;
-const g = groups[k] = groups[k] || { bayi: s.supplier, urun: i.product_name, ok: 0, wait: 0, short: 0, n: 0 };
-g.n++;
-if (isPending(s)) g.wait += i.qty;
-else { g.ok += i.received_qty; g.short += Math.max(0, i.qty - i.received_qty); }
-});
-});
-const g = Object.values(groups).sort((a, b) => trCmp(a.bayi, b.bayi) || trCmp(a.urun, b.urun));
-$('repBayi').innerHTML = !g.length
-? `<div class="text-center text-secondary small py-2">Bu aralıkta sevkiyat yok.</div>`
-: `<div class="table-responsive"><table class="table table-sm align-middle mb-0">
-<thead><tr><th>Firma / Ürün</th><th class="text-end">Teslim</th><th class="text-end">Eksik</th><th class="text-end">Bekleyen</th></tr></thead>
-<tbody>${g.map(r => `
-<tr>
-<td><span class="fw-semibold">${esc(r.bayi)}</span><div class="tiny text-secondary">${esc(r.urun)} • ${r.n} sevkiyat</div></td>
-<td class="text-end text-success">${num(r.ok)}</td>
-<td class="text-end ${r.short ? 'diff' : 'text-secondary'}">${r.short ? num(r.short) : '-'}</td>
-<td class="text-end text-warning-emphasis">${r.wait ? num(r.wait) : '-'}</td>
-</tr>`).join('')}
-</tbody></table></div>
-<div class="tiny text-secondary mt-1">Miktarlar Litre. "Eksik": bildirilip gelmeyen / hasarlı miktar.</div>`;
-}
-const MOVE_BADGE = {
-'Sevkiyat Teslimi': 'text-bg-success', 'Alacak Girişi': 'text-bg-primary', 'Açılış Alacağı': 'text-bg-info',
-'Alacak Düşümü': 'text-bg-danger', 'Düzeltme': 'text-bg-secondary', 'Onay İptali': 'text-bg-warning', 'Sevkiyat İptali': 'text-bg-warning'
 };

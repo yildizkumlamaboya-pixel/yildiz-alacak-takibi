@@ -374,6 +374,20 @@ body > *:not(#docView) { display: none !important; }
 </div>
 <div id="perList" class="vstack gap-1"></div>
 </div>
+<div class="card p-3 mb-3 admin-only d-none">
+<div class="d-flex justify-content-between align-items-center mb-2">
+<span class="section-title"><i class="bi bi-clock-history me-1"></i>İşlem Geçmişi</span>
+<span class="badge text-bg-light border" id="auditCount"></span>
+</div>
+<p class="text-secondary small mb-2">Kim, ne zaman, ne yaptı: sevkiyat bildirme / teslim alma / onay geri alma / silme, siparişler, alacak ekleme-düşme, ürün ve personel değişiklikleri, şifre ve hesap işlemleri, yedekler.</p>
+<div class="row g-2 mb-2">
+<div class="col-6"><label class="small-label">Başlangıç</label><input type="date" id="audFrom" class="form-control form-control-sm" onchange="loadAudit()"></div>
+<div class="col-6"><label class="small-label">Bitiş</label><input type="date" id="audTo" class="form-control form-control-sm" onchange="loadAudit()"></div>
+<div class="col-12"><select id="audFirm" class="form-select form-select-sm" onchange="loadAudit()"></select></div>
+</div>
+<div id="auditList"></div>
+<div id="auditPager"></div>
+</div>
 <div class="card p-3 admin-only d-none">
 <div class="section-title mb-2"><i class="bi bi-cloud-check me-1"></i>Yedekleme</div>
 <p class="text-secondary small mb-3">Her gün yöneticinin ilk girişinde otomatik yedek alınır. Manuel yedekler siz silene kadar kalır.</p>
@@ -593,5 +607,6 @@ body > *:not(#docView) { display: none !important; }
 <script src="app1.js"></script>
 <script src="app2.js"></script>
 <script src="app3.js"></script>
+<script src="app4.js"></script>
 </body>
 </html>

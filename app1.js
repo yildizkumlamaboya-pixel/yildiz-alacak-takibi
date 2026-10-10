@@ -334,7 +334,7 @@ $('btn-' + id).classList.toggle('active', id === tabId);
 });
 if (tabId === 'tabRapor') loadReport();
 if (tabId === 'tabSevkEt' && !isAdmin()) sevkPad = preparePad($('sevkSigCanvas'), sevkPad);
-if (tabId === 'tabAyarlar' && isAdmin()) { loadUsers(); loadBackups(); }
+if (tabId === 'tabAyarlar' && isAdmin()) { loadUsers(); loadBackups(); loadAudit(); }
 window.scrollTo(0, 0);
 }
 function render() {
@@ -385,8 +385,8 @@ ${firmLogo(n, 22)}<span class="small fw-semibold">${num(byBayi[n])} L</span></di
 </div>`;
 }
 const PAGE_SIZE = 20;
-const pages = { ship: 1, order: 1, moves: 1 };
-const PAGER_RENDER = { ship: () => renderShipments(), order: () => renderOrders(), moves: () => renderMovesList() };
+const pages = { ship: 1, order: 1, moves: 1, audit: 1 };
+const PAGER_RENDER = { ship: () => renderShipments(), order: () => renderOrders(), moves: () => renderMovesList(), audit: () => renderAudit() };
 function pageSlice(list, key) {
 const total = Math.max(1, Math.ceil(list.length / PAGE_SIZE));
 pages[key] = Math.min(Math.max(1, pages[key]), total);
@@ -414,7 +414,7 @@ ${html}
 function goPage(key, n) {
 pages[key] = n;
 PAGER_RENDER[key]();
-const el = $({ ship: 'shipmentList', order: 'orderList', moves: 'repMoves' }[key]);
+const el = $({ ship: 'shipmentList', order: 'orderList', moves: 'repMoves', audit: 'auditList' }[key]);
 if (el) window.scrollTo({ top: Math.max(0, el.getBoundingClientRect().top + window.scrollY - 140), behavior: 'smooth' });
 }
 function setShipFilter(f) {
@@ -586,40 +586,4 @@ $('sevkNo').value = '';
 personPicker('sevkPerson', me.name, '');
 itemEditor('sevkItems', visibleProducts(), [], false);
 if (sevkPad) sevkPad.clear();
-}
-async function createShipment() {
-const no = $('sevkNo').value.trim();
-if (!no) return notify('İrsaliye numarasını giriniz.', 'warning');
-const person = readPerson('sevkPerson');
-if (!person) return notify('İrsaliyeyi düzenleyen kişiyi seçin veya yazın.', 'warning');
-const items = readItems('sevkItems');
-if (!items) return;
-if (!sevkPad || sevkPad.isEmpty()) return notify('Lütfen teslim eden olarak imzalayınız.', 'warning');
-pendingSevk = { no, person, items, signature: sevkPad.toDataURL('image/png'), orderId: convertingOrder ? convertingOrder.id : null };
-const o = convertingOrder;
-const total = r2(items.reduce((a, i) => a + i.qty, 0));
-const row = (k, v) => `<div class="d-flex justify-content-between border-bottom py-2 small"><span class="text-secondary">${k}</span><span class="fw-semibold text-end ms-3">${v}</span></div>`;
-$('sevkConfirmBody').innerHTML = `
-${row('Gönderen', esc(me.name))}
-${row('İrsaliye No', '#' + esc(no))}
-${o ? row('Sipariş', orderNo(o)) : ''}
-${row('İrsaliyeyi Düzenleyen', esc(person))}
-<table class="table table-sm align-middle mt-2 mb-1">
-<thead><tr><th>Ürün</th>${o ? '<th class="text-end">Sipariş</th>' : ''}<th class="text-end">Gönderilen</th></tr></thead>
-<tbody>${items.map(i => {
-const p = prodById(i.product_id) || {};
-const oi = o ? o.items.find(x => x.product_id === i.product_id) : null;
-const diff = o && (!oi || oi.qty !== i.qty);
-return `<tr><td>${esc(p.name)}</td>${o ? `<td class="text-end text-secondary">${oi ? num(oi.qty) + ' L' : '-'}</td>` : ''}
-<td class="text-end fw-bold ${diff ? 'diff' : ''}">${num(i.qty)} L</td></tr>`;
-}).join('')}
-${o ? o.items.filter(oi => !items.some(i => i.product_id === oi.product_id)).map(oi =>
-`<tr><td>${esc(oi.product_name)}</td><td class="text-end text-secondary">${num(oi.qty)} L</td><td class="text-end diff">gönderilmiyor</td></tr>`).join('') : ''}
-</tbody>
-<tfoot><tr><td class="fw-semibold">Toplam</td>${o ? `<td class="text-end text-secondary">${num(o.items.reduce((a, i) => a + i.qty, 0))} L</td>` : ''}<td class="text-end fw-bold">${num(total)} L</td></tr></tfoot>
-</table>
-<div class="small-label mt-2">Teslim Eden İmzası</div>
-<img src="${pendingSevk.signature}" class="w-100 border rounded-3 bg-white" style="height:110px;object-fit:contain">
-<div class="tiny text-secondary mt-2"><i class="bi bi-info-circle"></i> "Onayla & Gönder" dediğinizde sevkiyat Yıldız Kumlama Boya'ya iletilir. Teslim alınana kadar düzenleyebilir veya silebilirsiniz.</div>`;
-sevkConfirmModal.show();
 }
