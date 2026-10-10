@@ -91,6 +91,36 @@ body > *:not(#docView) { display: none !important; }
 .bottom-nav button i { font-size: 1.2rem; }
 .bottom-nav button.active { color: #111827; font-weight: 600; }
 .bottom-nav button.active i { color: var(--brand); }
+/* ===== Geniş ekran (tablet / bilgisayar) ===== */
+@media screen and (min-width: 768px) {
+main.container { max-width: 760px !important; }
+#loginSection { max-width: 440px; margin-left: auto; margin-right: auto; }
+#shipmentList, #orderList, #catalogList, #stockList .vstack { display: grid !important; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .75rem !important; }
+#shipmentList > .card:only-child, #orderList > .card:only-child, #catalogList > .card:only-child { grid-column: 1 / -1; }
+.modal-dialog { max-width: 560px; }
+}
+@media screen and (min-width: 992px) {
+body:has(#bottomNav:not(.d-none)) { padding-bottom: 24px; padding-left: 232px; }
+main.container { max-width: 1120px !important; padding-left: 1.5rem; padding-right: 1.5rem; }
+.bottom-nav { top: 0; bottom: 0; right: auto; width: 232px; border-top: 0; border-right: 1px solid #e5e7eb; padding: 64px 0 0; overflow-y: auto; z-index: 1025; }
+.bottom-nav > div { flex-direction: column; max-width: none !important; padding: .75rem .6rem; gap: 2px; }
+.bottom-nav button { flex: 0 0 auto; flex-direction: row; justify-content: flex-start; gap: .8rem; padding: .7rem 1rem; font-size: .9rem; border-radius: 10px; color: #6b7280; }
+.bottom-nav button:hover { background: #f3f4f6; }
+.bottom-nav button.active { background: #fff8e1; }
+.bottom-nav button i { font-size: 1.15rem; }
+.nav-badge { position: static; margin-left: auto; }
+#tabAyarlar:not(.d-none), #tabStok:not(.d-none) { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0 1.25rem; align-items: start; }
+#tabStok > .d-flex, #tabStok > #stockList { grid-column: 1 / -1; }
+#shipmentList, #orderList, #catalogList { grid-template-columns: minmax(0, 1fr); }
+#tabSiparis:not(.d-none), #tabUrun:not(.d-none), #tabRapor:not(.d-none) { display: grid; grid-template-columns: 380px minmax(0, 1fr); gap: 0 1.25rem; align-items: start; }
+#tabSiparis > .card:first-child, #tabUrun > .card:first-child, #tabRapor > .card:first-child { grid-column: 1; grid-row: 1 / span 20; position: sticky; top: 76px; }
+#tabSiparis > *:not(.card:first-child), #tabUrun > *:not(.card:first-child), #tabRapor > *:not(.card:first-child) { grid-column: 2; }
+#tabSevkEt > .card { max-width: 640px; }
+.toast-container { left: calc(50% + 116px) !important; }
+}
+@media screen and (min-width: 1280px) {
+#shipmentList, #orderList, #catalogList { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
 </style>
 </head>
 <body>
@@ -156,16 +186,16 @@ body > *:not(#docView) { display: none !important; }
 <button class="btn btn-outline-secondary" onclick="setShipRange('all')">Tümü</button>
 </div>
 <div class="row g-2">
-<div class="col-6"><label class="small-label">Başlangıç</label><input type="date" id="shipFrom" class="form-control form-control-sm" onchange="shipFiltersChanged()"></div>
-<div class="col-6"><label class="small-label">Bitiş</label><input type="date" id="shipTo" class="form-control form-control-sm" onchange="shipFiltersChanged()"></div>
-<div class="col-12"><label class="small-label">Tarih Türü</label>
+<div class="col-6 col-lg"><label class="small-label">Başlangıç</label><input type="date" id="shipFrom" class="form-control form-control-sm" onchange="shipFiltersChanged()"></div>
+<div class="col-6 col-lg"><label class="small-label">Bitiş</label><input type="date" id="shipTo" class="form-control form-control-sm" onchange="shipFiltersChanged()"></div>
+<div class="col-12 col-lg"><label class="small-label">Tarih Türü</label>
 <select id="shipDateType" class="form-select form-select-sm" onchange="shipFiltersChanged()">
 <option value="created">Bildirim tarihine göre</option>
 <option value="approved">Teslim tarihine göre</option>
 </select></div>
-<div class="col-12 admin-only d-none" id="shipFirmWrap"><label class="small-label">Firma</label>
+<div class="col-12 col-lg admin-only d-none" id="shipFirmWrap"><label class="small-label">Firma</label>
 <select id="shipFirm" class="form-select form-select-sm" onchange="shipFiltersChanged()"></select></div>
-<div class="col-12"><label class="small-label">Ürün</label>
+<div class="col-12 col-lg"><label class="small-label">Ürün</label>
 <select id="shipProduct" class="form-select form-select-sm" onchange="shipFiltersChanged()"></select></div>
 </div>
 <button class="btn btn-sm btn-link text-danger px-0 mt-2" onclick="clearShipFilters()"><i class="bi bi-x-circle me-1"></i>Filtreleri temizle</button>
