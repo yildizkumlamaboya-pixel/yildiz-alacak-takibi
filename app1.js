@@ -229,6 +229,7 @@ if (!auto) sessionSet($('loginRemember').checked ? { name, pass } : null);
 me = data[0]; myPass = pass;
 $('loginPass').value = '';
 $('loginSection').classList.add('d-none');
+$('bootLoading').classList.add('d-none');
 $('appSection').classList.remove('d-none');
 $('bottomNav').classList.remove('d-none');
 $('logoutBtn').classList.remove('d-none');
@@ -264,6 +265,7 @@ closeDoc();
 [approveModal, editModal, detailModal, productModal, catModal, bayiModal].forEach(m => m.hide());
 if (channel) { sb.removeChannel(channel); channel = null; }
 $('loginSection').classList.remove('d-none');
+$('bootLoading').classList.add('d-none');
 $('appSection').classList.add('d-none');
 $('bottomNav').classList.add('d-none');
 $('logoutBtn').classList.add('d-none');
