@@ -5,7 +5,7 @@ on:
   push:
     branches: [main]
     paths:
-      - 'android-app/**'
+      - 'android-twa/**'
       - '.github/workflows/apk.yml'
 
 permissions:
@@ -17,80 +17,43 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - uses: actions/setup-node@v5
-        with:
-          node-version: 22
-
       - uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: 21
 
-      - name: Ortam bilgisi
-        run: |
-          echo "::notice title=Ortam::node $(node -v) | java $(java -version 2>&1 | head -1) | ANDROID_HOME=$ANDROID_HOME"
-          ls $ANDROID_HOME/platforms 2>/dev/null | tr '\n' ' ' > platforms.txt || true
-          echo "::notice title=Android platformlari::$(cat platforms.txt)"
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.11.1'
 
-      - name: Android projesini oluştur
-        working-directory: android-app
+      - name: APK derle (Chrome tabanlı uygulama - bildirim destekli)
         run: |
           set -o pipefail
-          echo "::notice::npm install basliyor"
-          npm install 2>&1 | tee -a $GITHUB_WORKSPACE/build.log
-          npx cap add android 2>&1 | tee -a $GITHUB_WORKSPACE/build.log
-          cp -r res/* android/app/src/main/res/
-          mkdir -p android/app/src/main/java/com/yildizkumlama/alacak
-          cp MainActivity.java android/app/src/main/java/com/yildizkumlama/alacak/MainActivity.java
-          sed -i "s/versionCode 1/versionCode ${{ github.run_number }}/; s/versionName \"1.0\"/versionName \"1.${{ github.run_number }}\"/" android/app/build.gradle
-          npx cap sync android 2>&1 | tee -a $GITHUB_WORKSPACE/build.log
-
-      - name: Sabit imza anahtarı (güncellemeler üstüne kurulabilsin)
-        run: |
-          cat >> android-app/android/app/build.gradle <<'GRADLE'
-
-          android {
-              signingConfigs {
-                  debug {
-                      storeFile file("$rootDir/../debug.keystore")
-                      storePassword "android"
-                      keyAlias "androiddebugkey"
-                      keyPassword "android"
-                  }
-              }
-          }
-          GRADLE
-
-      - name: APK derle
-        working-directory: android-app/android
-        run: |
-          chmod +x gradlew
-          set -o pipefail
-          ./gradlew assembleDebug --no-daemon 2>&1 | tee -a $GITHUB_WORKSPACE/build.log
+          gradle -p android-twa assembleDebug --no-daemon --stacktrace 2>&1 | tee build.log
 
       - name: Hata özeti
         if: failure()
         run: |
           touch build.log
-          echo "::error title=Derleme hatasi::Son loglar%0A$(tail -n 60 build.log | sed 's/%/%25/g' | sed ':a;N;$!ba;s/\n/%0A/g')"
+          echo "::error title=Derleme hatasi::Son loglar%0A$(grep -v '^\s*at ' build.log | tail -n 60 | sed 's/%/%25/g' | sed ':a;N;$!ba;s/\n/%0A/g')"
 
       - name: APK dosyası
         run: |
-          cp android-app/android/app/build/outputs/apk/debug/app-debug.apk YildizAlacak.apk
-          FP=$(keytool -printcert -jarfile YildizAlacak.apk | grep -m1 'SHA256:' | awk '{print $2}')
+          cp android-twa/app/build/outputs/apk/debug/app-debug.apk YildizEmanetStok.apk
+          FP=$(keytool -printcert -jarfile YildizEmanetStok.apk | grep -m1 'SHA256:' | awk '{print $2}')
           echo "::notice title=Imza::$FP"
 
       - uses: actions/upload-artifact@v4
         with:
-          name: YildizAlacak-apk
-          path: YildizAlacak.apk
+          name: YildizEmanetStok-apk
+          path: YildizEmanetStok.apk
 
       - name: Releases bölümüne koy
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           gh release delete apk-son --yes --cleanup-tag || true
-          gh release create apk-son YildizAlacak.apk \
-            --title "Yıldız Emanet Stok APK (son sürüm 1.${{ github.run_number }})" \
-            --notes "Otomatik derlendi. Telefona indirip kurun; önceki sürümün üstüne kurulur." \
+          gh release create apk-son YildizEmanetStok.apk \
+            --title "Yıldız Emanet Stok APK (sürüm 2.${{ github.run_number }})" \
+            --notes "Otomatik derlendi. Bildirim destekli (Chrome tabanlı). Önceki sürümün üstüne kurulur." \
             --latest
