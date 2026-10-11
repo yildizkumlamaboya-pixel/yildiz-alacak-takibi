@@ -7,7 +7,7 @@ Veriler Supabase'te tutulur; bu depoya yapılan her değişiklik Vercel'de otoma
 
 ## Kullanım
 - Telefonda adresi Chrome ile açın → menü (⋮) → **Ana ekrana ekle**.
-- İlk giriş: **Yıldız Kumlama Boya / 159753** → Ayarlar'dan şifrenizi hemen değiştirin.
+- İlk giriş: kullanıcı adı **admin** → Ayarlar'dan şifrenizi hemen değiştirin. Firma kullanıcı adları Ayarlar > Firmalar'dan belirlenir (kullanici-adi.sql gerekir).
 - Ayarlar → Firma Hesapları: firmalara şifre verin. Ayarlar → Personel Listesi: personel adları.
 - Ürünler → ürün listesi; Emanet Stoklar → firmaya emanet stok kalemi ve başlangıç emanet stoğu.
 - "Oturumu açık tut" işaretliyse yenilemede şifre sorulmaz; Çıkış yapınca unutulur.

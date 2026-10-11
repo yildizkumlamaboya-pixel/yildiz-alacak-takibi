@@ -394,7 +394,8 @@ $('bayiList').innerHTML = !rows.length
 <div class="border rounded-3 p-2 ps-3 d-flex justify-content-between align-items-center ${u.active ? '' : 'bg-light'}">
 <div>
 <div class="fw-semibold small d-flex align-items-center gap-2 ${u.active ? '' : 'text-secondary'}">${firmLogo(u.name, 20)}${esc(u.name)}</div>
-<div class="d-flex gap-1 mt-1">
+<div class="d-flex flex-wrap gap-1 mt-1">
+${u.username ? `<span class="badge text-bg-light border" style="font-size:.6rem"><i class="bi bi-person"></i> ${esc(u.username)}</span>` : ''}
 ${u.has_password ? `<span class="badge text-bg-success bg-opacity-75" style="font-size:.6rem">Şifre tanımlı</span>`
 : `<span class="badge text-bg-warning" style="font-size:.6rem">Şifre yok - giriş yapamaz</span>`}
 ${u.active ? '' : `<span class="badge text-bg-secondary" style="font-size:.6rem">Pasif</span>`}
@@ -427,6 +428,7 @@ $('bayiName').readOnly = !bayiEditingNew;
 $('bayiName').classList.toggle('bg-light', !bayiEditingNew);
 $('bayiNameHint').classList.toggle('d-none', !bayiEditingNew);
 $('bayiPass').value = '';
+$('bayiUser').value = u ? (u.username || '') : '';
 bayiModal.show();
 }
 let bayiLogoNew;
@@ -464,15 +466,29 @@ const name = $('bayiName').value.trim();
 showBayiLogo(LOGOS[name] || null, false);
 }
 async function saveBayi() {
-const name = $('bayiName').value.trim(), pass = $('bayiPass').value;
+const name = $('bayiName').value.trim(), pass = $('bayiPass').value, uname = $('bayiUser').value.trim();
+const cur = bayiEditingNew ? null : users.find(u => u.name === name);
+const unameChanged = uname !== ((cur && cur.username) || '');
 if (!name) return notify('Firma adı giriniz.', 'warning');
+if (!uname) return notify('Kullanıcı adı giriniz.', 'warning');
+if (!/^[A-Za-z0-9._-]{3,30}$/.test(uname)) return notify('Kullanıcı adı 3-30 karakter olmalı; Türkçe karakter ve boşluk kullanmayın.', 'warning');
+if (users.some(u => u.name !== name && ((u.username || '').toLowerCase() === uname.toLowerCase() || u.name.toLowerCase() === uname.toLowerCase())))
+return notify('Bu kullanıcı adı başka bir hesapta kullanılıyor.', 'warning');
 if ((bayiEditingNew || pass) && pass.length < 4) return notify('Şifre en az 4 karakter olmalı.', 'warning');
 if (bayiEditingNew && users.some(u => u.name.toLocaleLowerCase('tr') === name.toLocaleLowerCase('tr')))
 return notify('Bu isimde bir hesap zaten var.', 'warning');
-if (!bayiEditingNew && !pass && bayiLogoNew === undefined) return notify('Değişiklik yapılmadı.', 'secondary');
+if (!bayiEditingNew && !pass && !unameChanged && bayiLogoNew === undefined) return notify('Değişiklik yapılmadı.', 'secondary');
 if (bayiEditingNew || pass) {
 const r = await rpc('portal_admin_save_bayi', { p_name: name, p_new_pass: pass });
 if (!r) return;
+}
+if (unameChanged) {
+const { error } = await sb.rpc('portal_admin_set_username', { p_user: me.name, p_pass: myPass, p_name: name, p_username: uname });
+if (error) {
+if (bayiEditingNew) { bayiEditingNew = false; await loadUsers(); }
+return notify(/portal_admin_set_username|function|schema cache/i.test(error.message)
+? "Kullanıcı adı için Supabase'de kullanici-adi.sql kurulumunun çalıştırılması gerekiyor." : error.message, 'danger');
+}
 }
 if (bayiLogoNew !== undefined) {
 const { error } = await sb.rpc('portal_admin_set_logo', { p_user: me.name, p_pass: myPass, p_name: name, p_logo: bayiLogoNew });
@@ -516,54 +532,3 @@ renderAudit();
 }
 const AUD_TR = { pack_size: 'Teneke (L)', irsaliye_no: 'İrsaliye', prepared_by: 'Düzenleyen', received_by: 'Teslim alan', note: 'Not', due_date: 'Termin',
 code: 'Kod', name: 'Ad', approve_note: 'Not', critical: 'Uyarı sınırı' };
-function auditText(a) {
-if (a.text) return { icon: 'bi-dot', cls: 'text-secondary', text: a.text };
-const r = (a.info && a.info.row) || {}, c = (a.info && a.info.changes) || {};
-const irs = r.irsaliye_no ? '#' + r.irsaliye_no : '';
-const fieldList = () => Object.keys(c).filter(k => AUD_TR[k]).map(k => `${AUD_TR[k]}: ${c[k][0] ?? '-'} → ${c[k][1] ?? '-'}`).join(', ');
-switch (a.tbl) {
-case 'shipments':
-if (a.op === 'INSERT') return { icon: 'bi-truck', cls: 'text-primary', text: `Sevkiyat bildirdi ${irs}` };
-if (a.op === 'DELETE') return { icon: 'bi-trash', cls: 'text-danger', text: `Sevkiyatı sildi ${irs}` };
-if (c.status && c.status[1] === 'Bekliyor') return { icon: 'bi-arrow-counterclockwise', cls: 'text-warning-emphasis', text: `Onayı geri aldı ${irs}` };
-if (c.status) return { icon: 'bi-check2-circle', cls: 'text-success', text: `Teslim aldı ${irs}${r.received_by ? ' (teslim alan: ' + r.received_by + ')' : ''}` };
-return { icon: 'bi-pencil', cls: 'text-primary', text: `Sevkiyatı düzenledi ${irs}${fieldList() ? ' — ' + fieldList() : ''}` };
-case 'orders': {
-const no = r.id ? orderNo(r) : 'Sipariş';
-if (a.op === 'INSERT') return { icon: 'bi-clipboard-plus', cls: 'text-primary', text: `Sipariş verdi ${no}` };
-if (a.op === 'DELETE') return { icon: 'bi-trash', cls: 'text-danger', text: `Siparişi sildi ${no}` };
-if (c.cancelled) return c.cancelled[1]
-? { icon: 'bi-x-circle', cls: 'text-danger', text: `Siparişi iptal etti ${no}` }
-: { icon: 'bi-arrow-counterclockwise', cls: 'text-warning-emphasis', text: `Sipariş iptalini geri aldı ${no}` };
-return { icon: 'bi-pencil', cls: 'text-primary', text: `Siparişi düzenledi ${no}${fieldList() ? ' — ' + fieldList() : ''}` };
-}
-case 'stock_movements': {
-const up = Number(r.qty) > 0;
-return { icon: up ? 'bi-plus-circle' : 'bi-dash-circle', cls: up ? 'text-primary' : 'text-danger',
-text: `${up ? 'Emanet stok ekledi' : 'Emanet stoktan düştü'}: ${up ? '+' : ''}${num(r.qty)} L ${r.product_name || ''}${r.note ? ' — ' + r.note : ''}` };
-}
-case 'products':
-return a.op === 'INSERT'
-? { icon: 'bi-plus-square', cls: 'text-primary', text: `Emanet stok kalemi açtı: ${r.name || ''}` }
-: { icon: 'bi-trash', cls: 'text-danger', text: `Emanet stok kalemini sildi: ${r.name || ''}` };
-case 'catalog':
-if (a.op === 'INSERT') return { icon: 'bi-box-seam', cls: 'text-primary', text: `Ürün ekledi: ${r.code} ${r.name}` };
-if (a.op === 'DELETE') return { icon: 'bi-trash', cls: 'text-danger', text: `Ürünü sildi: ${r.code} ${r.name}` };
-return { icon: 'bi-pencil', cls: 'text-primary', text: `Ürünü düzenledi: ${fieldList() || r.name}` };
-case 'personnel':
-return a.op === 'INSERT'
-? { icon: 'bi-person-plus', cls: 'text-primary', text: `Personel ekledi: ${r.name} (${r.firm})` }
-: { icon: 'bi-person-dash', cls: 'text-danger', text: `Personeli sildi: ${r.name} (${r.firm})` };
-case 'portal_users':
-if (a.op === 'INSERT') return { icon: 'bi-building-add', cls: 'text-primary', text: `Firma hesabı oluşturdu: ${r.name}` };
-if (c.pass_changed) return { icon: 'bi-key', cls: 'text-warning-emphasis', text: a.actor === r.name ? 'Kendi şifresini değiştirdi' : `Şifre belirledi: ${r.name}` };
-return c.active && c.active[1]
-? { icon: 'bi-person-check', cls: 'text-success', text: `Firmayı aktif yaptı: ${r.name}` }
-: { icon: 'bi-person-slash', cls: 'text-danger', text: `Firmayı pasif yaptı: ${r.name}` };
-case 'backups':
-return a.op === 'RESTORE'
-? { icon: 'bi-arrow-counterclockwise', cls: 'text-danger', text: 'Yedekten geri yükleme yaptı' }
-: { icon: 'bi-cloud-plus', cls: 'text-secondary', text: `Manuel yedek aldı${r.note ? ': ' + r.note : ''}` };
-}
-return { icon: 'bi-dot', cls: 'text-secondary', text: `${a.tbl} ${a.op}` };
-}

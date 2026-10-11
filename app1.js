@@ -238,26 +238,26 @@ out.push(it);
 if (!out.length) { notify('En az bir ürün ekleyin.', 'warning'); return null; }
 return out;
 }
-async function loadLogins() {
-const { data, error } = await sb.rpc('portal_login_list');
-if (error) {
-$('loginRole').innerHTML = '<option value="">Bağlantı hatası</option>';
-return notify('Hesaplar yüklenemedi: ' + error.message, 'danger');
-}
-$('loginRole').innerHTML = (data || []).map(u =>
-`<option value="${esc(u.name)}">${esc(u.name)}${u.role === 'admin' ? ' (Yönetici)' : ''}</option>`).join('');
+const LAST_USER_KEY = 'yks_son_kullanici';
+function fillLastUser() {
+const u = lsGet(LAST_USER_KEY) || '';
+$('loginUser').value = u;
+if (!me && !$('loginSection').classList.contains('d-none')) (u ? $('loginPass') : $('loginUser')).focus();
 }
 const SESSION_KEY = 'yks_alacak_oturum';
 const sessionGet = () => { try { const v = localStorage.getItem(SESSION_KEY); return v ? JSON.parse(v) : null; } catch (e) { return null; } };
 const sessionSet = v => { try { v ? localStorage.setItem(SESSION_KEY, JSON.stringify(v)) : localStorage.removeItem(SESSION_KEY); } catch (e) { /* yoksay */ } };
 async function login(saved) {
 const auto = !!(saved && saved.name);
-const name = auto ? saved.name : $('loginRole').value, pass = auto ? saved.pass : $('loginPass').value;
-if (!name || !pass) return notify('Hesap ve şifre giriniz.', 'warning');
-const { data, error } = await sb.rpc('portal_login', { p_name: name, p_pass: pass });
+const typed = auto ? saved.name : $('loginUser').value.trim(), pass = auto ? saved.pass : $('loginPass').value;
+if (!typed || !pass) return notify('Kullanıcı adı ve şifre giriniz.', 'warning');
+const { data, error } = await sb.rpc('portal_login', { p_name: typed, p_pass: pass });
 if (error) { if (!auto) notify('Hata: ' + error.message, 'danger'); return; }
-if (!data || !data.length) { if (auto) sessionSet(null); else notify('Hatalı şifre!', 'danger'); return; }
-if (!auto) sessionSet($('loginRemember').checked ? { name, pass } : null);
+if (!data || !data.length) { if (auto) sessionSet(null); else notify('Kullanıcı adı veya şifre hatalı!', 'danger'); return; }
+if (!auto) {
+lsSet(LAST_USER_KEY, typed);
+sessionSet($('loginRemember').checked ? { name: data[0].name, pass } : null);
+}
 me = data[0]; myPass = pass;
 $('loginPass').value = '';
 $('loginSection').classList.add('d-none');
@@ -299,12 +299,12 @@ if (channel) { sb.removeChannel(channel); channel = null; }
 $('loginSection').classList.remove('d-none');
 $('bootLoading').classList.add('d-none');
 $('appSection').classList.add('d-none');
+setTimeout(fillLastUser, 0);
 $('bottomNav').classList.add('d-none');
 $('logoutBtn').classList.add('d-none');
 $('liveDot').classList.add('d-none');
 $('userFirm').innerText = '';
 $('userRoleTitle').innerText = 'Emanet Stok Takibi';
-loadLogins();
 }
 function armBackGuard() {
 try { history.pushState({ yks: Date.now() }, ''); } catch (e) { /* yoksay */ }

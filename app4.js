@@ -1,3 +1,55 @@
+function auditText(a) {
+if (a.text) return { icon: 'bi-dot', cls: 'text-secondary', text: a.text };
+const r = (a.info && a.info.row) || {}, c = (a.info && a.info.changes) || {};
+const irs = r.irsaliye_no ? '#' + r.irsaliye_no : '';
+const fieldList = () => Object.keys(c).filter(k => AUD_TR[k]).map(k => `${AUD_TR[k]}: ${c[k][0] ?? '-'} → ${c[k][1] ?? '-'}`).join(', ');
+switch (a.tbl) {
+case 'shipments':
+if (a.op === 'INSERT') return { icon: 'bi-truck', cls: 'text-primary', text: `Sevkiyat bildirdi ${irs}` };
+if (a.op === 'DELETE') return { icon: 'bi-trash', cls: 'text-danger', text: `Sevkiyatı sildi ${irs}` };
+if (c.status && c.status[1] === 'Bekliyor') return { icon: 'bi-arrow-counterclockwise', cls: 'text-warning-emphasis', text: `Onayı geri aldı ${irs}` };
+if (c.status) return { icon: 'bi-check2-circle', cls: 'text-success', text: `Teslim aldı ${irs}${r.received_by ? ' (teslim alan: ' + r.received_by + ')' : ''}` };
+return { icon: 'bi-pencil', cls: 'text-primary', text: `Sevkiyatı düzenledi ${irs}${fieldList() ? ' — ' + fieldList() : ''}` };
+case 'orders': {
+const no = r.id ? orderNo(r) : 'Sipariş';
+if (a.op === 'INSERT') return { icon: 'bi-clipboard-plus', cls: 'text-primary', text: `Sipariş verdi ${no}` };
+if (a.op === 'DELETE') return { icon: 'bi-trash', cls: 'text-danger', text: `Siparişi sildi ${no}` };
+if (c.cancelled) return c.cancelled[1]
+? { icon: 'bi-x-circle', cls: 'text-danger', text: `Siparişi iptal etti ${no}` }
+: { icon: 'bi-arrow-counterclockwise', cls: 'text-warning-emphasis', text: `Sipariş iptalini geri aldı ${no}` };
+return { icon: 'bi-pencil', cls: 'text-primary', text: `Siparişi düzenledi ${no}${fieldList() ? ' — ' + fieldList() : ''}` };
+}
+case 'stock_movements': {
+const up = Number(r.qty) > 0;
+return { icon: up ? 'bi-plus-circle' : 'bi-dash-circle', cls: up ? 'text-primary' : 'text-danger',
+text: `${up ? 'Emanet stok ekledi' : 'Emanet stoktan düştü'}: ${up ? '+' : ''}${num(r.qty)} L ${r.product_name || ''}${r.note ? ' — ' + r.note : ''}` };
+}
+case 'products':
+return a.op === 'INSERT'
+? { icon: 'bi-plus-square', cls: 'text-primary', text: `Emanet stok kalemi açtı: ${r.name || ''}` }
+: { icon: 'bi-trash', cls: 'text-danger', text: `Emanet stok kalemini sildi: ${r.name || ''}` };
+case 'catalog':
+if (a.op === 'INSERT') return { icon: 'bi-box-seam', cls: 'text-primary', text: `Ürün ekledi: ${r.code} ${r.name}` };
+if (a.op === 'DELETE') return { icon: 'bi-trash', cls: 'text-danger', text: `Ürünü sildi: ${r.code} ${r.name}` };
+return { icon: 'bi-pencil', cls: 'text-primary', text: `Ürünü düzenledi: ${fieldList() || r.name}` };
+case 'personnel':
+return a.op === 'INSERT'
+? { icon: 'bi-person-plus', cls: 'text-primary', text: `Personel ekledi: ${r.name} (${r.firm})` }
+: { icon: 'bi-person-dash', cls: 'text-danger', text: `Personeli sildi: ${r.name} (${r.firm})` };
+case 'portal_users':
+if (a.op === 'INSERT') return { icon: 'bi-building-add', cls: 'text-primary', text: `Firma hesabı oluşturdu: ${r.name}` };
+if (c.username) return { icon: 'bi-person-badge', cls: 'text-primary', text: `Kullanıcı adı değişti: ${r.name} → ${c.username[1]}` };
+if (c.pass_changed) return { icon: 'bi-key', cls: 'text-warning-emphasis', text: a.actor === r.name ? 'Kendi şifresini değiştirdi' : `Şifre belirledi: ${r.name}` };
+return c.active && c.active[1]
+? { icon: 'bi-person-check', cls: 'text-success', text: `Firmayı aktif yaptı: ${r.name}` }
+: { icon: 'bi-person-slash', cls: 'text-danger', text: `Firmayı pasif yaptı: ${r.name}` };
+case 'backups':
+return a.op === 'RESTORE'
+? { icon: 'bi-arrow-counterclockwise', cls: 'text-danger', text: 'Yedekten geri yükleme yaptı' }
+: { icon: 'bi-cloud-plus', cls: 'text-secondary', text: `Manuel yedek aldı${r.note ? ': ' + r.note : ''}` };
+}
+return { icon: 'bi-dot', cls: 'text-secondary', text: `${a.tbl} ${a.op}` };
+}
 function renderAudit() {
 $('auditCount').innerText = `${auditRows.length} işlem`;
 if (!auditRows.length) {
@@ -107,8 +159,5 @@ $('bootLoading').classList.add('d-none');
 if (!me) $('loginSection').classList.remove('d-none');
 });
 }
-loadLogins().then(() => {
-const s = sessionGet();
-if (s && !me && [...$('loginRole').options].some(o => o.value === s.name)) $('loginRole').value = s.name;
-});
+fillLastUser();
 if ('serviceWorker' in navigator && location.protocol.startsWith('http')) navigator.serviceWorker.register('sw.js');

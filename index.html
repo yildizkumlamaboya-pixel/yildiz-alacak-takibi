@@ -144,15 +144,15 @@ main.container { max-width: 1120px !important; padding-left: 1.5rem; padding-rig
 <div class="text-center mb-4">
 <img id="loginLogo" alt="Yıldız Kumlama &amp; Boya" class="mb-3" style="width:72%;max-width:260px">
 <h5 class="fw-semibold mb-1">Emanet Stok Takibi</h5>
-<p class="text-secondary small mb-0">Hesabınızı seçip şifrenizi giriniz.</p>
+<p class="text-secondary small mb-0">Kullanıcı adınızı ve şifrenizi giriniz.</p>
 </div>
 <div class="mb-3">
-<label class="small-label">Kullanıcı Hesabı</label>
-<select id="loginRole" class="form-select"><option value="">Yükleniyor...</option></select>
+<label class="small-label">Kullanıcı Adı</label>
+<input type="text" id="loginUser" class="form-control" placeholder="Kullanıcı adı" autocomplete="username" autocapitalize="none" autocorrect="off" spellcheck="false" onkeydown="if(event.key==='Enter')$('loginPass').focus()">
 </div>
 <div class="mb-3">
 <label class="small-label">Şifre</label>
-<input type="password" id="loginPass" class="form-control" placeholder="••••" onkeydown="if(event.key==='Enter')$('loginBtn').click()">
+<input type="password" id="loginPass" class="form-control" placeholder="••••" autocomplete="current-password" onkeydown="if(event.key==='Enter')$('loginBtn').click()">
 </div>
 <div class="form-check mb-4">
 <input class="form-check-input" type="checkbox" id="loginRemember" checked>
@@ -615,6 +615,9 @@ main.container { max-width: 1120px !important; padding-left: 1.5rem; padding-rig
 <label class="small-label">Firma Adı</label>
 <input type="text" id="bayiName" class="form-control" autocomplete="off">
 <div class="form-text mb-3" id="bayiNameHint">Bu ad sevkiyat ve emanet stok kayıtlarında kullanılır, sonradan değiştirilemez.</div>
+<label class="small-label">Kullanıcı Adı</label>
+<input type="text" id="bayiUser" class="form-control" placeholder="örn. delta" autocomplete="off" autocapitalize="none" spellcheck="false">
+<div class="form-text mb-3">Firma bu adla giriş yapar. Türkçe karakter ve boşluk olmadan (harf, rakam, . - _).</div>
 <label class="small-label">Giriş Şifresi</label>
 <input type="text" id="bayiPass" class="form-control" placeholder="En az 4 karakter" autocomplete="off">
 <label class="small-label mt-3">Firma Logosu <span class="text-secondary">(isteğe bağlı)</span></label>
