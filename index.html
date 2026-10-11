@@ -162,6 +162,19 @@ main.container { max-width: 1120px !important; padding-left: 1.5rem; padding-rig
 </section>
 <div id="bootLoading" class="d-none"></div>
 <div id="appSection" class="d-none">
+<div id="pushAsk" class="card p-3 mb-3 d-none" style="border-left:4px solid #FFD41F">
+<div class="d-flex gap-2 align-items-start">
+<i class="bi bi-bell-fill fs-4" style="color:#e0b400"></i>
+<div class="flex-grow-1">
+<div class="fw-semibold small">Telefonunuza bildirim gelsin mi?</div>
+<div class="tiny text-secondary mb-2" id="pushAskText"></div>
+<div class="d-flex gap-2">
+<button class="btn btn-sm btn-dark" onclick="busy(this, () => pushEnable(true))">İzin Ver</button>
+<button class="btn btn-sm btn-outline-secondary" onclick="pushAskLater()">Şimdi Değil</button>
+</div>
+</div>
+</div>
+</div>
 <section id="tabOnay">
 <div id="homeHero"></div>
 <div id="pendingAlert"></div>
@@ -383,6 +396,16 @@ main.container { max-width: 1120px !important; padding-left: 1.5rem; padding-rig
 </div>
 </section>
 <section id="tabAyarlar" class="d-none">
+<div class="card p-3 mb-3">
+<div class="section-title mb-2"><i class="bi bi-bell me-1"></i>Telefon Bildirimleri</div>
+<div class="small text-secondary mb-2" id="pushWhat"></div>
+<div class="small mb-3" id="pushState"></div>
+<div class="d-flex gap-2 flex-wrap">
+<button id="pushOnBtn" class="btn btn-dark btn-sm" onclick="busy(this, () => pushEnable(true))"><i class="bi bi-bell me-1"></i>Bildirimleri Aç</button>
+<button id="pushTestBtn" class="btn btn-outline-dark btn-sm d-none" onclick="busy(this, pushTest)"><i class="bi bi-send me-1"></i>Test Bildirimi Gönder</button>
+<button id="pushOffBtn" class="btn btn-outline-danger btn-sm d-none" onclick="busy(this, pushDisable)"><i class="bi bi-bell-slash me-1"></i>Bu Cihazda Kapat</button>
+</div>
+</div>
 <div class="card p-3 mb-3">
 <div class="section-title mb-3"><i class="bi bi-key me-1"></i>Şifremi Değiştir</div>
 <label class="small-label">Mevcut Şifre</label>

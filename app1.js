@@ -286,8 +286,12 @@ resetSevkForm();
 navStack = []; currentTab = 'tabOnay';
 switchTab('tabOnay', true);
 armBackGuard();
+pushOn = false; updatePushUi();
+pushEnable(false);
 }
 function logout() {
+if (me) pushDetach(me.name, myPass);
+$('pushAsk').classList.add('d-none');
 sessionSet(null);
 me = null; myPass = null;
 navStack = []; currentTab = 'tabOnay'; clearTimeout(exitTimer);
@@ -305,6 +309,96 @@ $('logoutBtn').classList.add('d-none');
 $('liveDot').classList.add('d-none');
 $('userFirm').innerText = '';
 $('userRoleTitle').innerText = 'Emanet Stok Takibi';
+}
+const VAPID_PUBLIC = 'BOGosaNnUI8PNLOw5X7T1XxXJBt70flv9tJdTGq76RkNOr9AzNOy9oDyXOdw5Xhxz8dE8ty55x_mH-JHUNBtmMI';
+const PUSH_ASK_KEY = 'yks_bildirim_sorma', PUSH_OFF_KEY = 'yks_bildirim_kapali';
+let pushOn = false;
+const pushSupported = () => !DEMO && 'serviceWorker' in navigator && 'PushManager' in window && 'Notification' in window && window.isSecureContext;
+const pushWhatText = () => isAdmin()
+? 'Firmalar yeni sevkiyat bildirdiğinde telefonunuza bildirim gelir (uygulama kapalıyken de).'
+: 'Yeni sipariş geldiğinde ve sevkiyatınız teslim alındığında telefonunuza bildirim gelir (uygulama kapalıyken de).';
+function b64ToBytes(s) {
+const b = atob((s + '='.repeat((4 - s.length % 4) % 4)).replace(/-/g, '+').replace(/_/g, '/'));
+return Uint8Array.from(b, c => c.charCodeAt(0));
+}
+async function pushSubscription(create) {
+const reg = await navigator.serviceWorker.ready;
+let sub = await reg.pushManager.getSubscription();
+if (sub && create) {
+const k = sub.options && sub.options.applicationServerKey;
+if (k && btoa(String.fromCharCode(...new Uint8Array(k))).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '') !== VAPID_PUBLIC) {
+await sub.unsubscribe(); sub = null;
+}
+}
+if (!sub && create) sub = await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: b64ToBytes(VAPID_PUBLIC) });
+return sub;
+}
+async function pushEnable(ask) {
+if (!me || !pushSupported()) return updatePushUi();
+if (!ask && lsGet(PUSH_OFF_KEY) === '1') return updatePushUi();
+try {
+if (Notification.permission !== 'granted') {
+if (!ask) return updatePushUi();
+const perm = await Notification.requestPermission();
+if (perm !== 'granted') { lsSet(PUSH_ASK_KEY, '1'); notify('Bildirim izni verilmedi.', 'warning'); return updatePushUi(); }
+}
+const sub = await pushSubscription(true), j = sub.toJSON();
+const { error } = await sb.rpc('portal_push_subscribe', { p_user: me.name, p_pass: myPass, p_endpoint: j.endpoint, p_p256dh: j.keys.p256dh, p_auth: j.keys.auth });
+if (error) {
+pushOn = false;
+if (ask) notify(/portal_push_subscribe|function|schema cache/i.test(error.message)
+? "Bildirimler için Supabase'de bildirim.sql kurulumunun çalıştırılması gerekiyor." : error.message, 'danger');
+return updatePushUi();
+}
+pushOn = true;
+lsSet(PUSH_OFF_KEY, '0');
+if (ask) notify('Bildirimler açıldı.');
+} catch (e) {
+pushOn = false;
+if (ask) notify('Bildirim açılamadı: ' + (e && e.message || e), 'danger');
+}
+updatePushUi();
+}
+async function pushDisable() {
+try {
+const sub = await pushSubscription(false);
+if (sub) {
+await sb.rpc('portal_push_unsubscribe', { p_user: me.name, p_pass: myPass, p_endpoint: sub.endpoint });
+await sub.unsubscribe();
+}
+} catch (e) { /* yoksay */ }
+pushOn = false; lsSet(PUSH_ASK_KEY, '1'); lsSet(PUSH_OFF_KEY, '1');
+notify('Bu cihazda bildirimler kapatıldı.', 'secondary');
+updatePushUi();
+}
+async function pushTest() {
+const r = await rpc('portal_push_test');
+if (!r) return;
+notify(r.data ? 'Test bildirimi gönderildi, birkaç saniye içinde gelir.' : 'Bu hesapta bildirime açık cihaz yok.', r.data ? 'success' : 'warning');
+}
+function pushAskLater() { lsSet(PUSH_ASK_KEY, '1'); $('pushAsk').classList.add('d-none'); }
+function pushDetach(name, pass) {
+if (!pushSupported() || !name) return;
+navigator.serviceWorker.ready.then(r => r.pushManager.getSubscription()).then(sub => {
+if (sub) sb.rpc('portal_push_unsubscribe', { p_user: name, p_pass: pass, p_endpoint: sub.endpoint });
+}).catch(() => {});
+}
+function updatePushUi() {
+if (!me) return;
+const sup = pushSupported(), perm = sup ? Notification.permission : 'unsupported';
+$('pushWhat').innerText = pushWhatText();
+$('pushAskText').innerText = pushWhatText();
+$('pushAsk').classList.toggle('d-none', !(sup && perm === 'default' && lsGet(PUSH_ASK_KEY) !== '1'));
+$('pushState').innerHTML = !sup
+? (DEMO ? '<span class="text-secondary">Yerel modda bildirim yok.</span>'
+: '<span class="text-warning-emphasis"><i class="bi bi-exclamation-triangle me-1"></i>Bu tarayıcı bildirimi desteklemiyor. Android\'de Chrome ile açın; iPhone\'da önce Paylaş → Ana Ekrana Ekle yapın ve oradan açın.</span>')
+: perm === 'denied'
+? '<span class="text-danger"><i class="bi bi-x-circle me-1"></i>Bildirim izni kapalı. Telefon Ayarlar → Uygulamalar (veya tarayıcı site ayarları) → Bildirimler kısmından izin verin.</span>'
+: pushOn ? '<span class="text-success"><i class="bi bi-check-circle me-1"></i>Bu cihazda bildirimler açık.</span>'
+: '<span class="text-secondary">Bu cihazda bildirimler kapalı.</span>';
+$('pushOnBtn').classList.toggle('d-none', !sup || perm === 'denied' || pushOn);
+$('pushTestBtn').classList.toggle('d-none', !pushOn);
+$('pushOffBtn').classList.toggle('d-none', !pushOn);
 }
 function armBackGuard() {
 try { history.pushState({ yks: Date.now() }, ''); } catch (e) { /* yoksay */ }
@@ -495,120 +589,4 @@ const names = [...new Set([
 ...shipments.filter(s => !firm || s.supplier === firm).flatMap(s => s.items.map(i => i.product_name))
 ].filter(Boolean))].sort(trCmp);
 keep('shipProduct', '<option value="">Tüm Ürünler</option>' + names.map(n => `<option value="${esc(n)}">${esc(n)}</option>`).join(''));
-}
-function shipDateRange() {
-const from = $('shipFrom').value, to = $('shipTo').value;
-const f = from ? new Date(from + 'T00:00:00') : null;
-let t = null;
-if (to) { t = new Date(to + 'T00:00:00'); t.setDate(t.getDate() + 1); }
-return { f, t, byApproved: $('shipDateType').value === 'approved' };
-}
-function baseFilteredShipments() {
-let list = shipments;
-const { f, t, byApproved } = shipDateRange();
-if (f || t) list = list.filter(s => {
-const v = byApproved ? s.approved_at : s.created_at;
-if (!v) return false;
-const d = new Date(v);
-return (!f || d >= f) && (!t || d < t);
-});
-const firm = isAdmin() ? $('shipFirm').value : '';
-if (firm) list = list.filter(s => s.supplier === firm);
-const prod = $('shipProduct').value;
-if (prod) list = list.filter(s => s.items.some(i => i.product_name === prod));
-const q = $('shipSearch').value.trim().toLocaleLowerCase('tr');
-if (q) list = list.filter(s => [s.irsaliye_no, s.supplier, s.prepared_by, s.received_by, s.order_id ? orderNoById(s.order_id) : '', ...s.items.map(i => i.product_name)]
-.join(' ').toLocaleLowerCase('tr').includes(q));
-return list;
-}
-function updateShipFilterSummary(approvedCount) {
-const { f, t, byApproved } = shipDateRange();
-const parts = [];
-if (f || t) parts.push((byApproved ? 'Teslim ' : '') + (f ? dOnly(f) : '…') + ' – ' + ($('shipTo').value ? dOnly($('shipTo').value + 'T00:00:00') : '…'));
-else parts.push('Tüm tarihler');
-if (isAdmin() && $('shipFirm').value) parts.push($('shipFirm').value);
-if ($('shipProduct').value) parts.push($('shipProduct').value);
-const active = !!(f || t || (isAdmin() && $('shipFirm').value) || $('shipProduct').value);
-$('shipFilterSummary').innerText = 'Filtre: ' + parts.join(' • ');
-$('shipFilterToggle').classList.toggle('border-primary', active);
-$('shipFilterToggle').classList.toggle('text-primary', active);
-$('bulkDocBtn').innerHTML = `<i class="bi bi-files me-1"></i>Toplu Belge (${approvedCount})`;
-$('bulkDocBtn').disabled = !approvedCount;
-}
-function statusBadge(s) {
-if (isPending(s)) return `<span class="badge text-bg-warning bg-opacity-75">Onay Bekliyor</span>`;
-const d = shipDiff(s);
-return `<span class="badge text-bg-success bg-opacity-75">Teslim Alındı</span>` +
-(d ? ` <span class="badge text-bg-${d === 'eksik' ? 'danger' : 'info'} bg-opacity-75">${d === 'eksik' ? 'Eksik' : 'Fazla'}</span>` : '');
-}
-function itemLines(s) {
-return s.items.map(i => {
-const diff = !isPending(s) && i.received_qty !== i.qty;
-return `<div class="item-line">
-<span>${esc(i.product_name)}</span>
-<span class="text-nowrap ${diff ? 'diff fw-semibold' : 'fw-medium'}">${diff
-? `${num(i.qty)} → ${num(i.received_qty)} L`
-: `${num(i.qty)} L`}${tnkSpan(i.product_id, isPending(s) ? i.qty : i.received_qty)}</span>
-</div>`;
-}).join('');
-}
-function renderShipments() {
-const all = shipments;
-const waiting = all.filter(isPending).length;
-const openOrders = orders.filter(o => orderState(o) === 'open').length;
-$('pendingAlert').innerHTML = isAdmin()
-? (waiting ? `<div class="alert alert-warning small py-2 d-flex align-items-center gap-2 clickable" onclick="setShipFilter('pending')">
-<i class="bi bi-bell"></i><span><b>${waiting}</b> sevkiyat teslim onayı bekliyor.</span></div>` : '')
-: (openOrders ? `<div class="alert alert-primary small py-2 d-flex align-items-center gap-2 clickable" onclick="switchTab('tabSiparis')">
-<i class="bi bi-clipboard-check"></i><span>Yıldız Kumlama Boya'dan <b>${openOrders}</b> açık sipariş var. Sevkiyata dönüştürmek için dokunun.</span></div>` : '');
-fillShipSelects();
-const base = baseFilteredShipments();
-let list = base;
-if (shipFilter === 'pending') list = list.filter(isPending);
-if (shipFilter === 'approved') list = list.filter(s => !isPending(s));
-updateShipFilterSummary(base.filter(s => !isPending(s)).length);
-$('shipmentCount').innerText = `${list.length} kayıt`;
-if (!list.length) {
-$('shipmentList').innerHTML = `<div class="card p-4 text-center text-secondary small"><i class="bi bi-inbox fs-3 d-block mb-1"></i>Kayıt bulunamadı.</div>`;
-$('shipPager').innerHTML = '';
-return;
-}
-$('shipPager').innerHTML = pagerHtml(list.length, 'ship');
-$('shipmentList').innerHTML = pageSlice(list, 'ship').map(s => {
-const pending = isPending(s);
-const canEdit = isAdmin() || (s.supplier === me.name && pending);
-return `
-<div class="card p-3 clickable" onclick="openDetail(${s.id})">
-<div class="d-flex justify-content-between align-items-start gap-2 mb-2">
-<div>
-<div class="d-flex align-items-center gap-2 flex-wrap">
-${isAdmin() ? firmLogo(s.supplier, 20) : ''}<span class="badge text-bg-light border fw-medium">${esc(s.supplier)}</span>
-<span class="fw-semibold small">#${esc(s.irsaliye_no)}</span>
-</div>
-<div class="tiny text-secondary mt-1">${s.order_id ? `<i class="bi bi-clipboard-check"></i> ${orderNoById(s.order_id)} • ` : ''}Düzenleyen: ${esc(s.prepared_by || '-')}${s.received_by ? ` • Teslim alan: ${esc(s.received_by)}` : ''}</div>
-</div>
-<div class="text-end">${statusBadge(s)}</div>
-</div>
-<div class="border-top pt-1">${itemLines(s)}</div>
-${s.items.length > 1 ? `<div class="item-line border-top mt-1 pt-1 text-secondary"><span>Toplam</span><span>${pending ? num(shipQty(s)) : num(shipRecv(s))} L</span></div>` : ''}
-<div class="text-secondary tiny mt-2">
-<i class="bi bi-clock"></i> ${dt(s.created_at)}
-${s.approved_at ? ` • <i class="bi bi-check2-circle"></i> ${dt(s.approved_at)}` : ''}
-${s.updated_at ? ` • <span class="text-primary"><i class="bi bi-pencil"></i> Düzenlendi</span>` : ''}
-</div>
-${pending && isAdmin() ? `
-<button onclick="event.stopPropagation(); openApprove(${s.id})" class="btn btn-sm btn-dark w-100 mt-3">
-<i class="bi bi-pen me-1"></i>Teslim Al & İmzala
-</button>` : ''}
-${!pending ? `
-<button onclick="event.stopPropagation(); openDoc(${s.id})" class="btn btn-sm btn-outline-secondary w-100 mt-2">
-<i class="bi bi-file-earmark-text me-1"></i>Teslimat Belgesi
-</button>` : ''}
-${canEdit ? `
-<div class="d-flex gap-2 mt-2">
-<button onclick="event.stopPropagation(); openEdit(${s.id})" class="btn btn-sm btn-light border flex-fill"><i class="bi bi-pencil me-1"></i>Düzenle</button>
-<button onclick="event.stopPropagation(); busy(this, () => deleteShipment(${s.id}))" class="btn btn-sm btn-outline-danger flex-fill"><i class="bi bi-trash me-1"></i>Sil</button>
-</div>` : ''}
-</div>`;
-}).join('');
 }

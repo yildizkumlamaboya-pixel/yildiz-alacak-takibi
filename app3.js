@@ -1,3 +1,130 @@
+async function deleteProduct() {
+const p = editingProduct;
+if (!confirm(`${p.allowed_bayi} - ${p.name} emanet stok kalemi ve hareket geçmişi silinsin mi?\n\n(Sevkiyat kaydı olan kalem silinemez.)`)) return;
+const r = await rpc('portal_delete_product', { p_id: p.id });
+if (!r) return;
+productModal.hide();
+notify('Emanet stok kalemi silindi.');
+await loadData();
+}
+async function processAdjust() {
+const pid = Number($('adjProduct').value);
+const qty = parseFloat($('adjQty').value);
+const sign = document.querySelector('input[name="adjType"]:checked').value === '-1' ? -1 : 1;
+if (!pid) return notify('Önce emanet stok kalemi tanımlayın.', 'warning');
+if (!qty || qty <= 0) return notify('Miktar giriniz.', 'warning');
+const p = prodById(pid);
+if (sign < 0 && !confirm(`${p.allowed_bayi} - ${p.name}\nEmanet stoktan ${num(qty)} L düşülecek. Devam edilsin mi?`)) return;
+const r = await rpc('portal_adjust_receivable', { p_product_id: pid, p_qty: sign * qty, p_note: $('adjNote').value });
+if (!r) return;
+$('adjQty').value = ''; $('adjNote').value = '';
+notify(sign > 0 ? 'Emanet stok eklendi.' : 'Emanet stoktan düşüldü.');
+await loadData();
+}
+async function addNewProduct() {
+const bayi = $('newAllowedBayi').value;
+const cid = Number($('newCatalog').value);
+if (!bayi) return notify('Önce Ayarlar > Firma Hesapları bölümünden firma ekleyin.', 'warning');
+if (!cid) return notify(catalog.length ? 'Bu firmaya eklenecek ürün kalmadı.' : 'Önce Ürünler ekranından ürün ekleyin.', 'warning');
+const r = await rpc('portal_add_product', {
+p_bayi: bayi, p_catalog_id: cid,
+p_critical: parseFloat($('newCritical').value) || 0, p_opening: parseFloat($('newOpening').value) || 0
+});
+if (!r) return;
+['newOpening', 'newCritical'].forEach(id => $(id).value = '');
+notify('Emanet stok kalemi eklendi.');
+await loadData();
+}
+function fillNewCatalog() {
+const bayi = $('newAllowedBayi').value;
+const used = new Set(products.filter(p => p.allowed_bayi === bayi).map(p => p.catalog_id));
+const list = catalog.slice().sort((a, b) => trCmp(a.name, b.name)).filter(c => !used.has(c.id));
+$('newCatalog').innerHTML = list.length
+? list.map(c => `<option value="${c.id}">${esc(c.name)} (${esc(c.code)})</option>`).join('')
+: `<option value="">${catalog.length ? 'Bu firmaya tüm ürünler eklenmiş' : 'Önce Ürünler ekranından ürün ekleyin'}</option>`;
+}
+function renderCatalog() {
+if (!isAdmin()) return;
+const q = $('catSearch').value.trim().toLocaleLowerCase('tr');
+const list = catalog.slice().sort((a, b) => trCmp(a.name, b.name))
+.filter(c => !q || `${c.code} ${c.name}`.toLocaleLowerCase('tr').includes(q));
+$('catCount').innerText = `${catalog.length} ürün`;
+$('catalogList').innerHTML = !list.length
+? `<div class="card p-4 text-center text-secondary small">${catalog.length ? 'Aramaya uyan ürün yok.' : 'Henüz ürün yok. Yukarıdan ekleyin.'}</div>`
+: list.map(c => {
+const used = products.filter(p => p.catalog_id === c.id);
+return `
+<div class="card p-3 d-flex flex-row justify-content-between align-items-center">
+<div class="me-2">
+<div class="fw-semibold small">${esc(c.name)}</div>
+<div class="tiny text-secondary">${esc(c.code)} • ${c.pack_size ? `<span class="text-primary">${num(c.pack_size)} L teneke</span>` : 'Litre'} • ${used.length
+? used.map(p => `${esc(p.allowed_bayi)}: ${num(p.qty)} L`).join(', ')
+: '<span class="fst-italic">firmaya atanmadı</span>'}</div>
+</div>
+<div class="d-flex gap-1 flex-shrink-0">
+<button class="btn btn-sm btn-light border" title="Düzenle" onclick="openCatEdit(${c.id})"><i class="bi bi-pencil"></i></button>
+<button class="btn btn-sm btn-outline-danger" title="Sil" onclick="busy(this, () => deleteCatalog(${c.id}))"><i class="bi bi-trash"></i></button>
+</div>
+</div>`;
+}).join('');
+}
+async function addCatalog() {
+const code = $('catCode').value.trim(), name = $('catName').value.trim();
+if (!code || !name) return notify('Ürün kodu ve adını giriniz.', 'warning');
+const pack = parseFloat($('catPack').value);
+if ($('catPack').value !== '' && !(pack > 0)) return notify('Teneke litresi geçersiz.', 'warning');
+const r = await rpc('portal_catalog_add', pack > 0 ? { p_code: code, p_name: name, p_pack: pack } : { p_code: code, p_name: name });
+if (!r) return;
+$('catCode').value = ''; $('catName').value = ''; $('catPack').value = '';
+notify('Ürün eklendi.');
+await loadData();
+}
+function openCatEdit(id) {
+editingCat = catalog.find(c => c.id === id);
+if (!editingCat) return;
+$('catEditCode').value = editingCat.code;
+$('catEditName').value = editingCat.name;
+$('catEditPack').value = editingCat.pack_size ?? '';
+const used = products.filter(p => p.catalog_id === id).map(p => p.allowed_bayi);
+$('catEditUsage').innerText = used.length
+? `Kullanan firmalar: ${used.join(', ')}. Yeni ad tüm emanet stok kalemlerine ve sevkiyatlara yansır.`
+: 'Bu ürün henüz bir firmaya atanmadı.';
+catModal.show();
+}
+async function saveCatEdit() {
+const code = $('catEditCode').value.trim(), name = $('catEditName').value.trim();
+if (!code || !name) return notify('Ürün kodu ve adı zorunlu.', 'warning');
+const pack = parseFloat($('catEditPack').value);
+if ($('catEditPack').value !== '' && !(pack > 0)) return notify('Teneke litresi geçersiz.', 'warning');
+const params = { p_id: editingCat.id, p_code: code, p_name: name };
+if (pack > 0 || editingCat.pack_size) params.p_pack = pack > 0 ? pack : null;
+const r = await rpc('portal_catalog_update', params);
+if (!r) return;
+catModal.hide();
+notify('Ürün güncellendi.');
+await loadData();
+}
+async function deleteCatalog(id, fromModal) {
+const c = catalog.find(x => x.id === id);
+if (!c || !confirm(`"${c.name}" ürün listesinden silinsin mi?`)) return;
+const r = await rpc('portal_catalog_delete', { p_id: id });
+if (!r) return;
+if (fromModal) catModal.hide();
+notify('Ürün silindi.');
+await loadData();
+}
+function renderPersonnel() {
+if (!isAdmin()) return;
+const firm = $('perFirm').value || me.name;
+const list = personnel.filter(x => x.firm === firm).sort((a, b) => trCmp(a.name, b.name));
+$('perList').innerHTML = !list.length
+? `<div class="text-secondary small text-center py-2">Bu firma için kayıtlı personel yok.</div>`
+: list.map(x => `
+<div class="border rounded-3 px-3 py-2 d-flex justify-content-between align-items-center">
+<span class="small">${esc(x.name)}</span>
+<button class="btn btn-sm btn-outline-danger" title="Sil" onclick="busy(this, () => deletePersonnel(${x.id}))"><i class="bi bi-trash"></i></button>
+</div>`).join('');
+}
 async function addPersonnel() {
 const firm = $('perFirm').value, name = $('perName').value.trim();
 if (!firm || !name) return notify('Firma ve ad soyad giriniz.', 'warning');
@@ -416,119 +543,3 @@ $('newAllowedBayi').innerHTML = act.length
 if (act.some(u => u.name === cur)) $('newAllowedBayi').value = cur;
 if (me) { fillSelects(); renderPersonnel(); }
 }
-function openBayiModal(i) {
-bayiEditingNew = (i === undefined);
-const u = bayiEditingNew ? null : users[i];
-$('bayiModalTitle').innerText = bayiEditingNew ? 'Yeni Firma' : 'Firmayı Düzenle';
-$('bayiPass').placeholder = bayiEditingNew || !u.has_password ? 'En az 4 karakter' : 'Değiştirmeyecekseniz boş bırakın';
-bayiLogoNew = undefined;
-showBayiLogo(u ? ((META.logos && META.logos[u.name]) || LOGOS[u.name]) : null, !!(u && META.logos && META.logos[u.name]));
-$('bayiName').value = u ? u.name : '';
-$('bayiName').readOnly = !bayiEditingNew;
-$('bayiName').classList.toggle('bg-light', !bayiEditingNew);
-$('bayiNameHint').classList.toggle('d-none', !bayiEditingNew);
-$('bayiPass').value = '';
-$('bayiUser').value = u ? (u.username || '') : '';
-bayiModal.show();
-}
-let bayiLogoNew;
-function showBayiLogo(L, removable) {
-$('bayiLogoPrev').innerHTML = L ? `<img src="${L.src}" alt="" style="max-width:120px;max-height:62px;object-fit:contain">`
-: '<span class="tiny text-secondary">Logo yok</span>';
-$('bayiLogoDel').classList.toggle('d-none', !removable);
-}
-function shrinkImage(file, max = 360) {
-return new Promise((resolve, reject) => {
-const url = URL.createObjectURL(file), img = new Image();
-img.onload = () => {
-const k = Math.min(1, max / Math.max(img.width, img.height));
-const w = Math.max(1, Math.round(img.width * k)), h = Math.max(1, Math.round(img.height * k));
-const c = document.createElement('canvas'); c.width = w; c.height = h;
-c.getContext('2d').drawImage(img, 0, 0, w, h);
-URL.revokeObjectURL(url);
-let src = c.toDataURL('image/webp', 0.85);
-if (!src.startsWith('data:image/webp')) src = c.toDataURL('image/png');
-resolve({ src, r: Math.round(w / h * 1000) / 1000 });
-};
-img.onerror = () => { URL.revokeObjectURL(url); reject(new Error('resim')); };
-img.src = url;
-});
-}
-async function pickBayiLogo(input) {
-const f = input.files[0]; input.value = '';
-if (!f) return;
-try { bayiLogoNew = await shrinkImage(f); showBayiLogo(bayiLogoNew, true); }
-catch (e) { notify('Resim okunamadı.', 'danger'); }
-}
-function clearBayiLogo() {
-bayiLogoNew = null;
-const name = $('bayiName').value.trim();
-showBayiLogo(LOGOS[name] || null, false);
-}
-async function saveBayi() {
-const name = $('bayiName').value.trim(), pass = $('bayiPass').value, uname = $('bayiUser').value.trim();
-const cur = bayiEditingNew ? null : users.find(u => u.name === name);
-const unameChanged = uname !== ((cur && cur.username) || '');
-if (!name) return notify('Firma adı giriniz.', 'warning');
-if (!uname) return notify('Kullanıcı adı giriniz.', 'warning');
-if (!/^[A-Za-z0-9._-]{3,30}$/.test(uname)) return notify('Kullanıcı adı 3-30 karakter olmalı; Türkçe karakter ve boşluk kullanmayın.', 'warning');
-if (users.some(u => u.name !== name && ((u.username || '').toLowerCase() === uname.toLowerCase() || u.name.toLowerCase() === uname.toLowerCase())))
-return notify('Bu kullanıcı adı başka bir hesapta kullanılıyor.', 'warning');
-if ((bayiEditingNew || pass) && pass.length < 4) return notify('Şifre en az 4 karakter olmalı.', 'warning');
-if (bayiEditingNew && users.some(u => u.name.toLocaleLowerCase('tr') === name.toLocaleLowerCase('tr')))
-return notify('Bu isimde bir hesap zaten var.', 'warning');
-if (!bayiEditingNew && !pass && !unameChanged && bayiLogoNew === undefined) return notify('Değişiklik yapılmadı.', 'secondary');
-if (bayiEditingNew || pass) {
-const r = await rpc('portal_admin_save_bayi', { p_name: name, p_new_pass: pass });
-if (!r) return;
-}
-if (unameChanged) {
-const { error } = await sb.rpc('portal_admin_set_username', { p_user: me.name, p_pass: myPass, p_name: name, p_username: uname });
-if (error) {
-if (bayiEditingNew) { bayiEditingNew = false; await loadUsers(); }
-return notify(/portal_admin_set_username|function|schema cache/i.test(error.message)
-? "Kullanıcı adı için Supabase'de kullanici-adi.sql kurulumunun çalıştırılması gerekiyor." : error.message, 'danger');
-}
-}
-if (bayiLogoNew !== undefined) {
-const { error } = await sb.rpc('portal_admin_set_logo', { p_user: me.name, p_pass: myPass, p_name: name, p_logo: bayiLogoNew });
-if (error) return notify(/portal_admin_set_logo|function|schema cache/i.test(error.message)
-? "Logo için Supabase'de teneke-logo.sql kurulumunun çalıştırılması gerekiyor." : error.message, 'danger');
-}
-bayiModal.hide();
-notify(bayiEditingNew ? 'Firma hesabı oluşturuldu.' : 'Firma bilgileri güncellendi.');
-await loadData();
-await loadUsers();
-}
-async function toggleBayi(i) {
-const u = users[i];
-if (u.active && !confirm(`${u.name} pasif yapılsın mı? Bu firma giriş yapamayacak (kayıtları silinmez).`)) return;
-const r = await rpc('portal_admin_set_active', { p_name: u.name, p_active: !u.active });
-if (!r) return;
-notify(u.active ? 'Firma pasif yapıldı.' : 'Firma aktif yapıldı.');
-await loadUsers();
-}
-let auditRows = [];
-async function loadAudit() {
-if (!isAdmin()) return;
-if (!$('audFrom').value) { const d = new Date(); d.setDate(d.getDate() - 30); $('audFrom').value = ymd(d); }
-if (!$('audTo').value) $('audTo').value = ymd(new Date());
-const f = new Date($('audFrom').value + 'T00:00:00');
-const t = new Date($('audTo').value + 'T00:00:00'); t.setDate(t.getDate() + 1);
-$('auditList').innerHTML = `<div class="text-center text-secondary small py-3"><div class="spinner-border spinner-border-sm"></div></div>`;
-const { data, error } = await sb.rpc('portal_audit_list', { p_user: me.name, p_pass: myPass,
-p_from: f.toISOString(), p_to: t.toISOString(), p_firm: $('audFirm').value || null, p_limit: 1000 });
-if (error) {
-auditRows = [];
-$('auditList').innerHTML = /portal_audit_list|function|schema cache/i.test(error.message)
-? `<div class="alert alert-warning small mb-0">İşlem geçmişi için Supabase'de <b>islem-gecmisi.sql</b> kurulumunun çalıştırılması gerekiyor.</div>`
-: `<div class="alert alert-danger small mb-0">${esc(error.message)}</div>`;
-$('auditPager').innerHTML = ''; $('auditCount').innerText = '';
-return;
-}
-auditRows = data || [];
-pages.audit = 1;
-renderAudit();
-}
-const AUD_TR = { pack_size: 'Teneke (L)', irsaliye_no: 'İrsaliye', prepared_by: 'Düzenleyen', received_by: 'Teslim alan', note: 'Not', due_date: 'Termin',
-code: 'Kod', name: 'Ad', approve_note: 'Not', critical: 'Uyarı sınırı' };

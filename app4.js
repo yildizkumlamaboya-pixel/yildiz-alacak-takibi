@@ -1,3 +1,119 @@
+function openBayiModal(i) {
+bayiEditingNew = (i === undefined);
+const u = bayiEditingNew ? null : users[i];
+$('bayiModalTitle').innerText = bayiEditingNew ? 'Yeni Firma' : 'Firmayı Düzenle';
+$('bayiPass').placeholder = bayiEditingNew || !u.has_password ? 'En az 4 karakter' : 'Değiştirmeyecekseniz boş bırakın';
+bayiLogoNew = undefined;
+showBayiLogo(u ? ((META.logos && META.logos[u.name]) || LOGOS[u.name]) : null, !!(u && META.logos && META.logos[u.name]));
+$('bayiName').value = u ? u.name : '';
+$('bayiName').readOnly = !bayiEditingNew;
+$('bayiName').classList.toggle('bg-light', !bayiEditingNew);
+$('bayiNameHint').classList.toggle('d-none', !bayiEditingNew);
+$('bayiPass').value = '';
+$('bayiUser').value = u ? (u.username || '') : '';
+bayiModal.show();
+}
+let bayiLogoNew;
+function showBayiLogo(L, removable) {
+$('bayiLogoPrev').innerHTML = L ? `<img src="${L.src}" alt="" style="max-width:120px;max-height:62px;object-fit:contain">`
+: '<span class="tiny text-secondary">Logo yok</span>';
+$('bayiLogoDel').classList.toggle('d-none', !removable);
+}
+function shrinkImage(file, max = 360) {
+return new Promise((resolve, reject) => {
+const url = URL.createObjectURL(file), img = new Image();
+img.onload = () => {
+const k = Math.min(1, max / Math.max(img.width, img.height));
+const w = Math.max(1, Math.round(img.width * k)), h = Math.max(1, Math.round(img.height * k));
+const c = document.createElement('canvas'); c.width = w; c.height = h;
+c.getContext('2d').drawImage(img, 0, 0, w, h);
+URL.revokeObjectURL(url);
+let src = c.toDataURL('image/webp', 0.85);
+if (!src.startsWith('data:image/webp')) src = c.toDataURL('image/png');
+resolve({ src, r: Math.round(w / h * 1000) / 1000 });
+};
+img.onerror = () => { URL.revokeObjectURL(url); reject(new Error('resim')); };
+img.src = url;
+});
+}
+async function pickBayiLogo(input) {
+const f = input.files[0]; input.value = '';
+if (!f) return;
+try { bayiLogoNew = await shrinkImage(f); showBayiLogo(bayiLogoNew, true); }
+catch (e) { notify('Resim okunamadı.', 'danger'); }
+}
+function clearBayiLogo() {
+bayiLogoNew = null;
+const name = $('bayiName').value.trim();
+showBayiLogo(LOGOS[name] || null, false);
+}
+async function saveBayi() {
+const name = $('bayiName').value.trim(), pass = $('bayiPass').value, uname = $('bayiUser').value.trim();
+const cur = bayiEditingNew ? null : users.find(u => u.name === name);
+const unameChanged = uname !== ((cur && cur.username) || '');
+if (!name) return notify('Firma adı giriniz.', 'warning');
+if (!uname) return notify('Kullanıcı adı giriniz.', 'warning');
+if (!/^[A-Za-z0-9._-]{3,30}$/.test(uname)) return notify('Kullanıcı adı 3-30 karakter olmalı; Türkçe karakter ve boşluk kullanmayın.', 'warning');
+if (users.some(u => u.name !== name && ((u.username || '').toLowerCase() === uname.toLowerCase() || u.name.toLowerCase() === uname.toLowerCase())))
+return notify('Bu kullanıcı adı başka bir hesapta kullanılıyor.', 'warning');
+if ((bayiEditingNew || pass) && pass.length < 4) return notify('Şifre en az 4 karakter olmalı.', 'warning');
+if (bayiEditingNew && users.some(u => u.name.toLocaleLowerCase('tr') === name.toLocaleLowerCase('tr')))
+return notify('Bu isimde bir hesap zaten var.', 'warning');
+if (!bayiEditingNew && !pass && !unameChanged && bayiLogoNew === undefined) return notify('Değişiklik yapılmadı.', 'secondary');
+if (bayiEditingNew || pass) {
+const r = await rpc('portal_admin_save_bayi', { p_name: name, p_new_pass: pass });
+if (!r) return;
+}
+if (unameChanged) {
+const { error } = await sb.rpc('portal_admin_set_username', { p_user: me.name, p_pass: myPass, p_name: name, p_username: uname });
+if (error) {
+if (bayiEditingNew) { bayiEditingNew = false; await loadUsers(); }
+return notify(/portal_admin_set_username|function|schema cache/i.test(error.message)
+? "Kullanıcı adı için Supabase'de kullanici-adi.sql kurulumunun çalıştırılması gerekiyor." : error.message, 'danger');
+}
+}
+if (bayiLogoNew !== undefined) {
+const { error } = await sb.rpc('portal_admin_set_logo', { p_user: me.name, p_pass: myPass, p_name: name, p_logo: bayiLogoNew });
+if (error) return notify(/portal_admin_set_logo|function|schema cache/i.test(error.message)
+? "Logo için Supabase'de teneke-logo.sql kurulumunun çalıştırılması gerekiyor." : error.message, 'danger');
+}
+bayiModal.hide();
+notify(bayiEditingNew ? 'Firma hesabı oluşturuldu.' : 'Firma bilgileri güncellendi.');
+await loadData();
+await loadUsers();
+}
+async function toggleBayi(i) {
+const u = users[i];
+if (u.active && !confirm(`${u.name} pasif yapılsın mı? Bu firma giriş yapamayacak (kayıtları silinmez).`)) return;
+const r = await rpc('portal_admin_set_active', { p_name: u.name, p_active: !u.active });
+if (!r) return;
+notify(u.active ? 'Firma pasif yapıldı.' : 'Firma aktif yapıldı.');
+await loadUsers();
+}
+let auditRows = [];
+async function loadAudit() {
+if (!isAdmin()) return;
+if (!$('audFrom').value) { const d = new Date(); d.setDate(d.getDate() - 30); $('audFrom').value = ymd(d); }
+if (!$('audTo').value) $('audTo').value = ymd(new Date());
+const f = new Date($('audFrom').value + 'T00:00:00');
+const t = new Date($('audTo').value + 'T00:00:00'); t.setDate(t.getDate() + 1);
+$('auditList').innerHTML = `<div class="text-center text-secondary small py-3"><div class="spinner-border spinner-border-sm"></div></div>`;
+const { data, error } = await sb.rpc('portal_audit_list', { p_user: me.name, p_pass: myPass,
+p_from: f.toISOString(), p_to: t.toISOString(), p_firm: $('audFirm').value || null, p_limit: 1000 });
+if (error) {
+auditRows = [];
+$('auditList').innerHTML = /portal_audit_list|function|schema cache/i.test(error.message)
+? `<div class="alert alert-warning small mb-0">İşlem geçmişi için Supabase'de <b>islem-gecmisi.sql</b> kurulumunun çalıştırılması gerekiyor.</div>`
+: `<div class="alert alert-danger small mb-0">${esc(error.message)}</div>`;
+$('auditPager').innerHTML = ''; $('auditCount').innerText = '';
+return;
+}
+auditRows = data || [];
+pages.audit = 1;
+renderAudit();
+}
+const AUD_TR = { pack_size: 'Teneke (L)', irsaliye_no: 'İrsaliye', prepared_by: 'Düzenleyen', received_by: 'Teslim alan', note: 'Not', due_date: 'Termin',
+code: 'Kod', name: 'Ad', approve_note: 'Not', critical: 'Uyarı sınırı' };
 function auditText(a) {
 if (a.text) return { icon: 'bi-dot', cls: 'text-secondary', text: a.text };
 const r = (a.info && a.info.row) || {}, c = (a.info && a.info.changes) || {};

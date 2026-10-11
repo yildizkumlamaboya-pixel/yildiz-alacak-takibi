@@ -1,3 +1,119 @@
+function shipDateRange() {
+const from = $('shipFrom').value, to = $('shipTo').value;
+const f = from ? new Date(from + 'T00:00:00') : null;
+let t = null;
+if (to) { t = new Date(to + 'T00:00:00'); t.setDate(t.getDate() + 1); }
+return { f, t, byApproved: $('shipDateType').value === 'approved' };
+}
+function baseFilteredShipments() {
+let list = shipments;
+const { f, t, byApproved } = shipDateRange();
+if (f || t) list = list.filter(s => {
+const v = byApproved ? s.approved_at : s.created_at;
+if (!v) return false;
+const d = new Date(v);
+return (!f || d >= f) && (!t || d < t);
+});
+const firm = isAdmin() ? $('shipFirm').value : '';
+if (firm) list = list.filter(s => s.supplier === firm);
+const prod = $('shipProduct').value;
+if (prod) list = list.filter(s => s.items.some(i => i.product_name === prod));
+const q = $('shipSearch').value.trim().toLocaleLowerCase('tr');
+if (q) list = list.filter(s => [s.irsaliye_no, s.supplier, s.prepared_by, s.received_by, s.order_id ? orderNoById(s.order_id) : '', ...s.items.map(i => i.product_name)]
+.join(' ').toLocaleLowerCase('tr').includes(q));
+return list;
+}
+function updateShipFilterSummary(approvedCount) {
+const { f, t, byApproved } = shipDateRange();
+const parts = [];
+if (f || t) parts.push((byApproved ? 'Teslim ' : '') + (f ? dOnly(f) : '…') + ' – ' + ($('shipTo').value ? dOnly($('shipTo').value + 'T00:00:00') : '…'));
+else parts.push('Tüm tarihler');
+if (isAdmin() && $('shipFirm').value) parts.push($('shipFirm').value);
+if ($('shipProduct').value) parts.push($('shipProduct').value);
+const active = !!(f || t || (isAdmin() && $('shipFirm').value) || $('shipProduct').value);
+$('shipFilterSummary').innerText = 'Filtre: ' + parts.join(' • ');
+$('shipFilterToggle').classList.toggle('border-primary', active);
+$('shipFilterToggle').classList.toggle('text-primary', active);
+$('bulkDocBtn').innerHTML = `<i class="bi bi-files me-1"></i>Toplu Belge (${approvedCount})`;
+$('bulkDocBtn').disabled = !approvedCount;
+}
+function statusBadge(s) {
+if (isPending(s)) return `<span class="badge text-bg-warning bg-opacity-75">Onay Bekliyor</span>`;
+const d = shipDiff(s);
+return `<span class="badge text-bg-success bg-opacity-75">Teslim Alındı</span>` +
+(d ? ` <span class="badge text-bg-${d === 'eksik' ? 'danger' : 'info'} bg-opacity-75">${d === 'eksik' ? 'Eksik' : 'Fazla'}</span>` : '');
+}
+function itemLines(s) {
+return s.items.map(i => {
+const diff = !isPending(s) && i.received_qty !== i.qty;
+return `<div class="item-line">
+<span>${esc(i.product_name)}</span>
+<span class="text-nowrap ${diff ? 'diff fw-semibold' : 'fw-medium'}">${diff
+? `${num(i.qty)} → ${num(i.received_qty)} L`
+: `${num(i.qty)} L`}${tnkSpan(i.product_id, isPending(s) ? i.qty : i.received_qty)}</span>
+</div>`;
+}).join('');
+}
+function renderShipments() {
+const all = shipments;
+const waiting = all.filter(isPending).length;
+const openOrders = orders.filter(o => orderState(o) === 'open').length;
+$('pendingAlert').innerHTML = isAdmin()
+? (waiting ? `<div class="alert alert-warning small py-2 d-flex align-items-center gap-2 clickable" onclick="setShipFilter('pending')">
+<i class="bi bi-bell"></i><span><b>${waiting}</b> sevkiyat teslim onayı bekliyor.</span></div>` : '')
+: (openOrders ? `<div class="alert alert-primary small py-2 d-flex align-items-center gap-2 clickable" onclick="switchTab('tabSiparis')">
+<i class="bi bi-clipboard-check"></i><span>Yıldız Kumlama Boya'dan <b>${openOrders}</b> açık sipariş var. Sevkiyata dönüştürmek için dokunun.</span></div>` : '');
+fillShipSelects();
+const base = baseFilteredShipments();
+let list = base;
+if (shipFilter === 'pending') list = list.filter(isPending);
+if (shipFilter === 'approved') list = list.filter(s => !isPending(s));
+updateShipFilterSummary(base.filter(s => !isPending(s)).length);
+$('shipmentCount').innerText = `${list.length} kayıt`;
+if (!list.length) {
+$('shipmentList').innerHTML = `<div class="card p-4 text-center text-secondary small"><i class="bi bi-inbox fs-3 d-block mb-1"></i>Kayıt bulunamadı.</div>`;
+$('shipPager').innerHTML = '';
+return;
+}
+$('shipPager').innerHTML = pagerHtml(list.length, 'ship');
+$('shipmentList').innerHTML = pageSlice(list, 'ship').map(s => {
+const pending = isPending(s);
+const canEdit = isAdmin() || (s.supplier === me.name && pending);
+return `
+<div class="card p-3 clickable" onclick="openDetail(${s.id})">
+<div class="d-flex justify-content-between align-items-start gap-2 mb-2">
+<div>
+<div class="d-flex align-items-center gap-2 flex-wrap">
+${isAdmin() ? firmLogo(s.supplier, 20) : ''}<span class="badge text-bg-light border fw-medium">${esc(s.supplier)}</span>
+<span class="fw-semibold small">#${esc(s.irsaliye_no)}</span>
+</div>
+<div class="tiny text-secondary mt-1">${s.order_id ? `<i class="bi bi-clipboard-check"></i> ${orderNoById(s.order_id)} • ` : ''}Düzenleyen: ${esc(s.prepared_by || '-')}${s.received_by ? ` • Teslim alan: ${esc(s.received_by)}` : ''}</div>
+</div>
+<div class="text-end">${statusBadge(s)}</div>
+</div>
+<div class="border-top pt-1">${itemLines(s)}</div>
+${s.items.length > 1 ? `<div class="item-line border-top mt-1 pt-1 text-secondary"><span>Toplam</span><span>${pending ? num(shipQty(s)) : num(shipRecv(s))} L</span></div>` : ''}
+<div class="text-secondary tiny mt-2">
+<i class="bi bi-clock"></i> ${dt(s.created_at)}
+${s.approved_at ? ` • <i class="bi bi-check2-circle"></i> ${dt(s.approved_at)}` : ''}
+${s.updated_at ? ` • <span class="text-primary"><i class="bi bi-pencil"></i> Düzenlendi</span>` : ''}
+</div>
+${pending && isAdmin() ? `
+<button onclick="event.stopPropagation(); openApprove(${s.id})" class="btn btn-sm btn-dark w-100 mt-3">
+<i class="bi bi-pen me-1"></i>Teslim Al & İmzala
+</button>` : ''}
+${!pending ? `
+<button onclick="event.stopPropagation(); openDoc(${s.id})" class="btn btn-sm btn-outline-secondary w-100 mt-2">
+<i class="bi bi-file-earmark-text me-1"></i>Teslimat Belgesi
+</button>` : ''}
+${canEdit ? `
+<div class="d-flex gap-2 mt-2">
+<button onclick="event.stopPropagation(); openEdit(${s.id})" class="btn btn-sm btn-light border flex-fill"><i class="bi bi-pencil me-1"></i>Düzenle</button>
+<button onclick="event.stopPropagation(); busy(this, () => deleteShipment(${s.id}))" class="btn btn-sm btn-outline-danger flex-fill"><i class="bi bi-trash me-1"></i>Sil</button>
+</div>` : ''}
+</div>`;
+}).join('');
+}
 function resetSevkForm() {
 if (!me || isAdmin()) return;
 convertingOrder = null; pendingSevk = null;
@@ -440,131 +556,4 @@ if (!r) return;
 productModal.hide();
 notify('Kalem güncellendi.');
 await loadData();
-}
-async function deleteProduct() {
-const p = editingProduct;
-if (!confirm(`${p.allowed_bayi} - ${p.name} emanet stok kalemi ve hareket geçmişi silinsin mi?\n\n(Sevkiyat kaydı olan kalem silinemez.)`)) return;
-const r = await rpc('portal_delete_product', { p_id: p.id });
-if (!r) return;
-productModal.hide();
-notify('Emanet stok kalemi silindi.');
-await loadData();
-}
-async function processAdjust() {
-const pid = Number($('adjProduct').value);
-const qty = parseFloat($('adjQty').value);
-const sign = document.querySelector('input[name="adjType"]:checked').value === '-1' ? -1 : 1;
-if (!pid) return notify('Önce emanet stok kalemi tanımlayın.', 'warning');
-if (!qty || qty <= 0) return notify('Miktar giriniz.', 'warning');
-const p = prodById(pid);
-if (sign < 0 && !confirm(`${p.allowed_bayi} - ${p.name}\nEmanet stoktan ${num(qty)} L düşülecek. Devam edilsin mi?`)) return;
-const r = await rpc('portal_adjust_receivable', { p_product_id: pid, p_qty: sign * qty, p_note: $('adjNote').value });
-if (!r) return;
-$('adjQty').value = ''; $('adjNote').value = '';
-notify(sign > 0 ? 'Emanet stok eklendi.' : 'Emanet stoktan düşüldü.');
-await loadData();
-}
-async function addNewProduct() {
-const bayi = $('newAllowedBayi').value;
-const cid = Number($('newCatalog').value);
-if (!bayi) return notify('Önce Ayarlar > Firma Hesapları bölümünden firma ekleyin.', 'warning');
-if (!cid) return notify(catalog.length ? 'Bu firmaya eklenecek ürün kalmadı.' : 'Önce Ürünler ekranından ürün ekleyin.', 'warning');
-const r = await rpc('portal_add_product', {
-p_bayi: bayi, p_catalog_id: cid,
-p_critical: parseFloat($('newCritical').value) || 0, p_opening: parseFloat($('newOpening').value) || 0
-});
-if (!r) return;
-['newOpening', 'newCritical'].forEach(id => $(id).value = '');
-notify('Emanet stok kalemi eklendi.');
-await loadData();
-}
-function fillNewCatalog() {
-const bayi = $('newAllowedBayi').value;
-const used = new Set(products.filter(p => p.allowed_bayi === bayi).map(p => p.catalog_id));
-const list = catalog.slice().sort((a, b) => trCmp(a.name, b.name)).filter(c => !used.has(c.id));
-$('newCatalog').innerHTML = list.length
-? list.map(c => `<option value="${c.id}">${esc(c.name)} (${esc(c.code)})</option>`).join('')
-: `<option value="">${catalog.length ? 'Bu firmaya tüm ürünler eklenmiş' : 'Önce Ürünler ekranından ürün ekleyin'}</option>`;
-}
-function renderCatalog() {
-if (!isAdmin()) return;
-const q = $('catSearch').value.trim().toLocaleLowerCase('tr');
-const list = catalog.slice().sort((a, b) => trCmp(a.name, b.name))
-.filter(c => !q || `${c.code} ${c.name}`.toLocaleLowerCase('tr').includes(q));
-$('catCount').innerText = `${catalog.length} ürün`;
-$('catalogList').innerHTML = !list.length
-? `<div class="card p-4 text-center text-secondary small">${catalog.length ? 'Aramaya uyan ürün yok.' : 'Henüz ürün yok. Yukarıdan ekleyin.'}</div>`
-: list.map(c => {
-const used = products.filter(p => p.catalog_id === c.id);
-return `
-<div class="card p-3 d-flex flex-row justify-content-between align-items-center">
-<div class="me-2">
-<div class="fw-semibold small">${esc(c.name)}</div>
-<div class="tiny text-secondary">${esc(c.code)} • ${c.pack_size ? `<span class="text-primary">${num(c.pack_size)} L teneke</span>` : 'Litre'} • ${used.length
-? used.map(p => `${esc(p.allowed_bayi)}: ${num(p.qty)} L`).join(', ')
-: '<span class="fst-italic">firmaya atanmadı</span>'}</div>
-</div>
-<div class="d-flex gap-1 flex-shrink-0">
-<button class="btn btn-sm btn-light border" title="Düzenle" onclick="openCatEdit(${c.id})"><i class="bi bi-pencil"></i></button>
-<button class="btn btn-sm btn-outline-danger" title="Sil" onclick="busy(this, () => deleteCatalog(${c.id}))"><i class="bi bi-trash"></i></button>
-</div>
-</div>`;
-}).join('');
-}
-async function addCatalog() {
-const code = $('catCode').value.trim(), name = $('catName').value.trim();
-if (!code || !name) return notify('Ürün kodu ve adını giriniz.', 'warning');
-const pack = parseFloat($('catPack').value);
-if ($('catPack').value !== '' && !(pack > 0)) return notify('Teneke litresi geçersiz.', 'warning');
-const r = await rpc('portal_catalog_add', pack > 0 ? { p_code: code, p_name: name, p_pack: pack } : { p_code: code, p_name: name });
-if (!r) return;
-$('catCode').value = ''; $('catName').value = ''; $('catPack').value = '';
-notify('Ürün eklendi.');
-await loadData();
-}
-function openCatEdit(id) {
-editingCat = catalog.find(c => c.id === id);
-if (!editingCat) return;
-$('catEditCode').value = editingCat.code;
-$('catEditName').value = editingCat.name;
-$('catEditPack').value = editingCat.pack_size ?? '';
-const used = products.filter(p => p.catalog_id === id).map(p => p.allowed_bayi);
-$('catEditUsage').innerText = used.length
-? `Kullanan firmalar: ${used.join(', ')}. Yeni ad tüm emanet stok kalemlerine ve sevkiyatlara yansır.`
-: 'Bu ürün henüz bir firmaya atanmadı.';
-catModal.show();
-}
-async function saveCatEdit() {
-const code = $('catEditCode').value.trim(), name = $('catEditName').value.trim();
-if (!code || !name) return notify('Ürün kodu ve adı zorunlu.', 'warning');
-const pack = parseFloat($('catEditPack').value);
-if ($('catEditPack').value !== '' && !(pack > 0)) return notify('Teneke litresi geçersiz.', 'warning');
-const params = { p_id: editingCat.id, p_code: code, p_name: name };
-if (pack > 0 || editingCat.pack_size) params.p_pack = pack > 0 ? pack : null;
-const r = await rpc('portal_catalog_update', params);
-if (!r) return;
-catModal.hide();
-notify('Ürün güncellendi.');
-await loadData();
-}
-async function deleteCatalog(id, fromModal) {
-const c = catalog.find(x => x.id === id);
-if (!c || !confirm(`"${c.name}" ürün listesinden silinsin mi?`)) return;
-const r = await rpc('portal_catalog_delete', { p_id: id });
-if (!r) return;
-if (fromModal) catModal.hide();
-notify('Ürün silindi.');
-await loadData();
-}
-function renderPersonnel() {
-if (!isAdmin()) return;
-const firm = $('perFirm').value || me.name;
-const list = personnel.filter(x => x.firm === firm).sort((a, b) => trCmp(a.name, b.name));
-$('perList').innerHTML = !list.length
-? `<div class="text-secondary small text-center py-2">Bu firma için kayıtlı personel yok.</div>`
-: list.map(x => `
-<div class="border rounded-3 px-3 py-2 d-flex justify-content-between align-items-center">
-<span class="small">${esc(x.name)}</span>
-<button class="btn btn-sm btn-outline-danger" title="Sil" onclick="busy(this, () => deletePersonnel(${x.id}))"><i class="bi bi-trash"></i></button>
-</div>`).join('');
 }
