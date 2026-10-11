@@ -1,6 +1,6 @@
 {
   "appId": "com.yildizkumlama.alacak",
-  "appName": "Yıldız Alacak",
+  "appName": "Yıldız Emanet Stok",
   "webDir": "www",
   "server": {
     "url": "https://yildiz-alacak-takibi.vercel.app",

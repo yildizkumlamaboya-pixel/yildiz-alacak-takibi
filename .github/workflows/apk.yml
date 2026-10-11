@@ -91,6 +91,6 @@ jobs:
         run: |
           gh release delete apk-son --yes --cleanup-tag || true
           gh release create apk-son YildizAlacak.apk \
-            --title "Yıldız Alacak APK (son sürüm 1.${{ github.run_number }})" \
+            --title "Yıldız Emanet Stok APK (son sürüm 1.${{ github.run_number }})" \
             --notes "Otomatik derlendi. Telefona indirip kurun; önceki sürümün üstüne kurulur." \
             --latest

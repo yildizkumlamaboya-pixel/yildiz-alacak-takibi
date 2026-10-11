@@ -1,15 +1,15 @@
-# Yıldız Kumlama Boya – Alacak Takibi
+# Yıldız Kumlama Boya – Emanet Stok Takibi
 
 Canlı adres: **https://yildiz-alacak-takibi.vercel.app**
 
-Delta Boya, Minimar gibi firmalardan stoklu alacağı (Litre) takip eden PWA.
+Delta Boya, Minimar gibi firmalardan emanet stoğu (Litre) takip eden PWA.
 Veriler Supabase'te tutulur; bu depoya yapılan her değişiklik Vercel'de otomatik yayına çıkar.
 
 ## Kullanım
 - Telefonda adresi Chrome ile açın → menü (⋮) → **Ana ekrana ekle**.
 - İlk giriş: **Yıldız Kumlama Boya / 159753** → Ayarlar'dan şifrenizi hemen değiştirin.
 - Ayarlar → Firma Hesapları: firmalara şifre verin. Ayarlar → Personel Listesi: personel adları.
-- Ürünler → ürün listesi; Alacaklar → firmaya alacak kalemi ve başlangıç alacağı.
+- Ürünler → ürün listesi; Emanet Stoklar → firmaya emanet stok kalemi ve başlangıç emanet stoğu.
 - "Oturumu açık tut" işaretliyse yenilemede şifre sorulmaz; Çıkış yapınca unutulur.
 
 ## Özellikler

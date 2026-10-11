@@ -74,10 +74,10 @@ const st = balanceState(p);
 $('repSummary').innerHTML = `
 <div class="small fw-semibold mb-2 px-1">${esc(p.allowed_bayi)} • ${esc(p.name)}</div>
 <div class="row g-2">
-<div class="col-6"><div class="stat"><div class="tiny text-secondary">Eklenen Alacak</div><div class="v text-primary">+${num(sumUp(reportMoves))} L</div></div></div>
+<div class="col-6"><div class="stat"><div class="tiny text-secondary">Eklenen Emanet Stok</div><div class="v text-primary">+${num(sumUp(reportMoves))} L</div></div></div>
 <div class="col-6"><div class="stat"><div class="tiny text-secondary">Teslim Alınan</div><div class="v text-success">${num(delivered(reportMoves))} L</div></div></div>
 <div class="col-6"><div class="stat"><div class="tiny text-secondary">Onay Bekleyen</div><div class="v text-warning-emphasis">${num(pendingQty(p.id))} L</div></div></div>
-<div class="col-6"><div class="stat"><div class="tiny text-secondary">Kalan Alacak (güncel)</div><div class="v ${st.txt}">${num(p.qty)} L</div></div></div>
+<div class="col-6"><div class="stat"><div class="tiny text-secondary">Kalan Emanet Stok (güncel)</div><div class="v ${st.txt}">${num(p.qty)} L</div></div></div>
 </div>`;
 } else {
 const rows = sortProducts(reportProducts()).map(p => {
@@ -148,10 +148,10 @@ return `
 <div>
 <div class="small fw-semibold">${esc(p.name)}</div>
 <div class="d-flex flex-wrap align-items-center gap-1 mt-1">
-<span class="badge ${typeBadge[m.movement_type] || 'text-bg-light'} bg-opacity-75" style="font-size:.6rem">${esc(m.movement_type)}</span>
+<span class="badge ${typeBadge[m.movement_type] || 'text-bg-light'} bg-opacity-75" style="font-size:.6rem">${esc(emn(m.movement_type))}</span>
 ${isAdmin() && m.bayi ? `<span class="badge text-bg-light border" style="font-size:.6rem">${esc(m.bayi)}</span>` : ''}
 </div>
-<div class="tiny text-secondary mt-1">${dt(m.created_at)}${m.created_by ? ' • ' + esc(m.created_by) : ''}${m.note ? ' • ' + esc(m.note) : ''}</div>
+<div class="tiny text-secondary mt-1">${dt(m.created_at)}${m.created_by ? ' • ' + esc(m.created_by) : ''}${m.note ? ' • ' + esc(emn(m.note)) : ''}</div>
 </div>
 <div class="text-end text-nowrap">
 <div class="fw-bold small ${up ? 'text-primary' : 'text-success'}">${up ? '+' : ''}${num(m.qty)} L</div>
@@ -164,13 +164,13 @@ $('movesPager').innerHTML = pagerHtml(reportMoves.length, 'moves');
 function exportCsv() {
 if (!reportMoves.length) return notify('Dışa aktarılacak hareket yok.', 'warning');
 const dec = v => String(v ?? '').replace('.', ',');
-const rows = [['Tarih', 'Firma', 'Ürün Kodu', 'Ürün', 'Hareket', 'Miktar (L)', 'Kalan Alacak (L)', 'Açıklama', 'İşlemi Yapan']];
+const rows = [['Tarih', 'Firma', 'Ürün Kodu', 'Ürün', 'Hareket', 'Miktar (L)', 'Kalan Emanet Stok (L)', 'Açıklama', 'İşlemi Yapan']];
 reportMoves.forEach(m => {
 const p = prodById(m.product_id) || {};
-rows.push([dt(m.created_at), m.bayi || p.allowed_bayi, p.code, p.name, m.movement_type, dec(m.qty), dec(m.balance_after), m.note, m.created_by]);
+rows.push([dt(m.created_at), m.bayi || p.allowed_bayi, p.code, p.name, emn(m.movement_type), dec(m.qty), dec(m.balance_after), emn(m.note), m.created_by]);
 });
 const csv = '\uFEFF' + rows.map(r => r.map(v => `"${String(v ?? '').replace(/"/g, '""')}"`).join(';')).join('\r\n');
-download(csv, `alacak-hareketleri_${$('repFrom').value}_${$('repTo').value}.csv`, 'text/csv;charset=utf-8');
+download(csv, `emanet-stok-hareketleri_${$('repFrom').value}_${$('repTo').value}.csv`, 'text/csv;charset=utf-8');
 }
 function showDoc(html, title) {
 $('docPage').innerHTML = html;
@@ -185,10 +185,10 @@ document.title = APP_TITLE;
 const docHeader = (title, sub) => `
 <div class="d-flex justify-content-between align-items-start border-bottom border-2 border-dark pb-2 mb-3">
 <div>${LOGOS[ADMIN_FIRM] ? `<img src="${LOGOS[ADMIN_FIRM].src}" class="doc-logo" alt="Yıldız Kumlama &amp; Boya">` : '<h1>YILDIZ KUMLAMA BOYA</h1>'}
-<div class="doc-lbl mt-1">Stoklu Alacak Takibi</div></div>
+<div class="doc-lbl mt-1">Emanet Stok Takibi</div></div>
 <div class="text-end"><div class="fw-bold" style="font-size:16px">${title}</div>${sub}</div>
 </div>`;
-const docFooter = () => `<div class="doc-lbl mt-4" style="font-size:10px">Bu belge Yıldız Kumlama Boya alacak takip sisteminden ${dt(new Date())} tarihinde oluşturulmuştur.</div>`;
+const docFooter = () => `<div class="doc-lbl mt-4" style="font-size:10px">Bu belge Yıldız Kumlama Boya emanet stok takip sisteminden ${dt(new Date())} tarihinde oluşturulmuştur.</div>`;
 const docNo = s => `TES-${new Date(s.approved_at || s.created_at).getFullYear()}-${String(s.id).padStart(5, '0')}`;
 async function fetchDocData(ids) {
 const out = {};
@@ -243,7 +243,7 @@ ${s.items.length > 1 ? `<tfoot><tr><td colspan="3" class="text-end">Toplam</td>
 </table>
 ${after && Object.keys(after).length ? `
 <div class="border rounded p-2 mb-2" style="background:#f9fafb">
-<div class="doc-lbl mb-1">Bu teslimat sonrası ${esc(s.supplier)} kalan alacak:</div>
+<div class="doc-lbl mb-1">Bu teslimat sonrası ${esc(s.supplier)} kalan emanet stok:</div>
 ${s.items.filter(i => i.product_id in after).map(i => `<div>${esc(i.product_name)}: <b>${num(after[i.product_id])} L</b>${tnk(i.product_id, after[i.product_id]) ? ' (≈ ' + tnk(i.product_id, after[i.product_id]) + ')' : ''}${after[i.product_id] < 0 ? ' <span class="text-danger">(fazla teslim)</span>' : ''}</div>`).join('')}
 </div>` : ''}
 <div class="doc-sign">
@@ -327,7 +327,7 @@ const { f, t } = rangeIso();
 const r = await rpc('portal_statement', { p_bayi: bayi, p_from: f ? f.toISOString() : null, p_to: t ? t.toISOString() : null });
 if (!r) return;
 const rows = (r.data || []).map(x => ({ ...x, start: Number(x.start), added: Number(x.added), delivered: Number(x.delivered), other: Number(x.other), end: Number(x.end) }));
-if (!rows.length) return notify('Bu firmaya tanımlı alacak kalemi yok.', 'warning');
+if (!rows.length) return notify('Bu firmaya tanımlı emanet stok kalemi yok.', 'warning');
 const sum = k => r2(rows.reduce((a, x) => a + x[k], 0));
 const periodTxt = `${f ? dOnly(f) : 'Başlangıç'} – ${$('repTo').value ? dOnly($('repTo').value + 'T00:00:00') : dOnly(new Date())}`;
 const endTxt = $('repTo').value ? dOnly($('repTo').value + 'T00:00:00') : dOnly(new Date());
@@ -335,10 +335,10 @@ const dels = shipments.filter(s => s.supplier === bayi && !isPending(s) && (!f |
 .sort((a, b) => new Date(a.approved_at) - new Date(b.approved_at));
 const cell = v => `<td class="text-end text-nowrap">${num(v)}</td>`;
 const html = `
-${docHeader('ALACAK MUTABAKAT EKSTRESİ', `<div>Dönem: <b>${periodTxt}</b></div>`)}
+${docHeader('EMANET STOK MUTABAKAT EKSTRESİ', `<div>Dönem: <b>${periodTxt}</b></div>`)}
 <table class="doc-meta mb-2">
 <tr>
-<td><div class="doc-lbl">Alacaklı</div><div class="fw-bold">Yıldız Kumlama Boya</div></td>
+<td><div class="doc-lbl">Emanet Sahibi</div><div class="fw-bold">Yıldız Kumlama Boya</div></td>
 <td><div class="doc-lbl">Teslim Edecek Firma</div><div class="fw-bold d-flex align-items-center gap-2">${firmLogo(bayi, 26)}${esc(bayi)}</div></td>
 </tr>
 </table>
@@ -351,7 +351,7 @@ ${docHeader('ALACAK MUTABAKAT EKSTRESİ', `<div>Dönem: <b>${periodTxt}</b></div
 <tfoot><tr><td colspan="2" class="text-end">Toplam</td>${cell(sum('start'))}${cell(sum('added'))}${cell(sum('delivered'))}${cell(sum('other'))}
 <td class="text-end text-nowrap">${num(sum('end'))}</td></tr></tfoot>
 </table>
-<div class="doc-lbl mt-1">* Diğer: düzeltmeler, onay iptalleri, silinen teslimatlar ve alacak düşümleri. Dönem Sonu = Dönem Başı + Eklenen − Teslim Alınan + Diğer.</div>
+<div class="doc-lbl mt-1">* Diğer: düzeltmeler, onay iptalleri, silinen teslimatlar ve emanet stok düşümleri. Dönem Sonu = Dönem Başı + Eklenen − Teslim Alınan + Diğer.</div>
 <div class="doc-h2">Dönem İçi Teslimatlar</div>
 ${dels.length ? `
 <table class="doc-items">
@@ -540,12 +540,12 @@ return { icon: 'bi-pencil', cls: 'text-primary', text: `Siparişi düzenledi ${n
 case 'stock_movements': {
 const up = Number(r.qty) > 0;
 return { icon: up ? 'bi-plus-circle' : 'bi-dash-circle', cls: up ? 'text-primary' : 'text-danger',
-text: `${up ? 'Alacak ekledi' : 'Alacaktan düştü'}: ${up ? '+' : ''}${num(r.qty)} L ${r.product_name || ''}${r.note ? ' — ' + r.note : ''}` };
+text: `${up ? 'Emanet stok ekledi' : 'Emanet stoktan düştü'}: ${up ? '+' : ''}${num(r.qty)} L ${r.product_name || ''}${r.note ? ' — ' + r.note : ''}` };
 }
 case 'products':
 return a.op === 'INSERT'
-? { icon: 'bi-plus-square', cls: 'text-primary', text: `Alacak kalemi açtı: ${r.name || ''}` }
-: { icon: 'bi-trash', cls: 'text-danger', text: `Alacak kalemini sildi: ${r.name || ''}` };
+? { icon: 'bi-plus-square', cls: 'text-primary', text: `Emanet stok kalemi açtı: ${r.name || ''}` }
+: { icon: 'bi-trash', cls: 'text-danger', text: `Emanet stok kalemini sildi: ${r.name || ''}` };
 case 'catalog':
 if (a.op === 'INSERT') return { icon: 'bi-box-seam', cls: 'text-primary', text: `Ürün ekledi: ${r.code} ${r.name}` };
 if (a.op === 'DELETE') return { icon: 'bi-trash', cls: 'text-danger', text: `Ürünü sildi: ${r.code} ${r.name}` };

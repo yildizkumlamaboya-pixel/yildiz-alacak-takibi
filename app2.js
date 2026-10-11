@@ -223,7 +223,7 @@ const s = shipments.find(x => x.id === id);
 if (!s) return;
 const msg = isPending(s)
 ? `#${s.irsaliye_no} numaralı sevkiyat silinsin mi?`
-: `#${s.irsaliye_no} TESLİM ALINMIŞ bir kayıt.\nSilinirse teslim alınan miktarlar ${s.supplier} alacağına geri eklenecek:\n` +
+: `#${s.irsaliye_no} TESLİM ALINMIŞ bir kayıt.\nSilinirse teslim alınan miktarlar ${s.supplier} emanet stoğuna geri eklenecek:\n` +
 s.items.filter(i => i.received_qty > 0).map(i => `• ${i.product_name}: ${num(i.received_qty)} L`).join('\n') + '\n\nDevam edilsin mi?';
 if (!confirm(msg)) return;
 const r = await rpc('portal_delete_shipment', { p_id: id });
@@ -295,14 +295,14 @@ const s = shipments.find(x => x.id === id);
 if (!s) return;
 const reason = prompt(
 `#${s.irsaliye_no} numaralı sevkiyatın onayı geri alınacak.\n\n` +
-`• Teslim alınan miktarlar ${s.supplier} alacağına geri eklenecek\n` +
+`• Teslim alınan miktarlar ${s.supplier} emanet stoğuna geri eklenecek\n` +
 `• İmza silinecek, kayıt "Onay Bekliyor" durumuna dönecek\n` +
 `• ${s.supplier} kaydı tekrar düzenleyebilecek\n\nAçıklama (isteğe bağlı):`, '');
 if (reason === null) return;
 const r = await rpc('portal_unapprove_shipment', { p_id: id, p_reason: reason });
 if (!r) return;
 detailModal.hide();
-notify('Onay geri alındı, alacak geri eklendi.');
+notify('Onay geri alındı, emanet stok geri eklendi.');
 await loadData();
 }
 $('approveModal').addEventListener('shown.bs.modal', () => { signaturePad = preparePad($('signatureCanvas'), signaturePad); });
@@ -341,7 +341,7 @@ if (!p) return;
 const after = r2(p.qty - (isNaN(rec) ? 0 : rec));
 row.querySelector('.apv-after').innerHTML =
 (!isNaN(rec) && tnk(p.id, rec) ? `<div class="text-primary">Gelen: ${tnk(p.id, rec)}</div>` : '') +
-`Kalan alacak: ${num(p.qty)} → <b class="${after < 0 ? 'text-danger' : 'text-success'}">${num(after)} L</b>` +
+`Kalan emanet stok: ${num(p.qty)} → <b class="${after < 0 ? 'text-danger' : 'text-success'}">${num(after)} L</b>` +
 (diff ? `<div class="diff">${rec < qty ? `${num(qty - rec)} L eksik` : `${num(rec - qty)} L fazla`}</div>` : '');
 }
 async function confirmApproval() {
@@ -363,15 +363,15 @@ p_note: $('apvNote').value.trim(), p_items: items.map(({ qty, ...x }) => x)
 });
 if (!r) return;
 approveModal.hide();
-notify('Teslim alındı, alacaktan düşüldü.');
+notify('Teslim alındı, emanet stoktan düşüldü.');
 await loadData();
 }
 function renderStock() {
 const list = visibleProducts();
 if (!list.length) {
 $('stockList').innerHTML = `<div class="card p-4 text-center text-secondary small">${isAdmin()
-? 'Henüz alacak kalemi yok. Önce Ürünler ekranından ürün ekleyin, sonra aşağıdan firmaya atayın.'
-: 'Size tanımlı alacak kalemi yok.'}</div>`;
+? 'Henüz emanet stok kalemi yok. Önce Ürünler ekranından ürün ekleyin, sonra aşağıdan firmaya atayın.'
+: 'Size tanımlı emanet stok kalemi yok.'}</div>`;
 return;
 }
 const groups = {};
@@ -414,7 +414,7 @@ return sortProducts(list).map(p =>
 function fillSelects() {
 const keep = (id, html) => { const el = $(id), cur = el.value; el.innerHTML = html; if ([...el.options].some(o => o.value === cur)) el.value = cur; };
 if (isAdmin()) {
-keep('adjProduct', productOptions(products, true) || '<option value="">Önce alacak kalemi ekleyin</option>');
+keep('adjProduct', productOptions(products, true) || '<option value="">Önce emanet stok kalemi ekleyin</option>');
 keep('repBayiSel', `<option value="">Tüm Firmalar</option>` + bayiNames().map(n => `<option value="${esc(n)}">${esc(n)}</option>`).join(''));
 const firms = [me.name, ...bayiNames()];
 keep('audFirm', '<option value="">Tüm firmalar ve işlemler</option>' + bayiNames().map(n => `<option value="${esc(n)}">${esc(n)}</option>`).join(''));
@@ -443,25 +443,25 @@ await loadData();
 }
 async function deleteProduct() {
 const p = editingProduct;
-if (!confirm(`${p.allowed_bayi} - ${p.name} alacak kalemi ve hareket geçmişi silinsin mi?\n\n(Sevkiyat kaydı olan kalem silinemez.)`)) return;
+if (!confirm(`${p.allowed_bayi} - ${p.name} emanet stok kalemi ve hareket geçmişi silinsin mi?\n\n(Sevkiyat kaydı olan kalem silinemez.)`)) return;
 const r = await rpc('portal_delete_product', { p_id: p.id });
 if (!r) return;
 productModal.hide();
-notify('Alacak kalemi silindi.');
+notify('Emanet stok kalemi silindi.');
 await loadData();
 }
 async function processAdjust() {
 const pid = Number($('adjProduct').value);
 const qty = parseFloat($('adjQty').value);
 const sign = document.querySelector('input[name="adjType"]:checked').value === '-1' ? -1 : 1;
-if (!pid) return notify('Önce alacak kalemi tanımlayın.', 'warning');
+if (!pid) return notify('Önce emanet stok kalemi tanımlayın.', 'warning');
 if (!qty || qty <= 0) return notify('Miktar giriniz.', 'warning');
 const p = prodById(pid);
-if (sign < 0 && !confirm(`${p.allowed_bayi} - ${p.name}\nAlacaktan ${num(qty)} L düşülecek. Devam edilsin mi?`)) return;
+if (sign < 0 && !confirm(`${p.allowed_bayi} - ${p.name}\nEmanet stoktan ${num(qty)} L düşülecek. Devam edilsin mi?`)) return;
 const r = await rpc('portal_adjust_receivable', { p_product_id: pid, p_qty: sign * qty, p_note: $('adjNote').value });
 if (!r) return;
 $('adjQty').value = ''; $('adjNote').value = '';
-notify(sign > 0 ? 'Alacak eklendi.' : 'Alacaktan düşüldü.');
+notify(sign > 0 ? 'Emanet stok eklendi.' : 'Emanet stoktan düşüldü.');
 await loadData();
 }
 async function addNewProduct() {
@@ -475,7 +475,7 @@ p_critical: parseFloat($('newCritical').value) || 0, p_opening: parseFloat($('ne
 });
 if (!r) return;
 ['newOpening', 'newCritical'].forEach(id => $(id).value = '');
-notify('Alacak kalemi eklendi.');
+notify('Emanet stok kalemi eklendi.');
 await loadData();
 }
 function fillNewCatalog() {
@@ -530,7 +530,7 @@ $('catEditName').value = editingCat.name;
 $('catEditPack').value = editingCat.pack_size ?? '';
 const used = products.filter(p => p.catalog_id === id).map(p => p.allowed_bayi);
 $('catEditUsage').innerText = used.length
-? `Kullanan firmalar: ${used.join(', ')}. Yeni ad tüm alacak kalemlerine ve sevkiyatlara yansır.`
+? `Kullanan firmalar: ${used.join(', ')}. Yeni ad tüm emanet stok kalemlerine ve sevkiyatlara yansır.`
 : 'Bu ürün henüz bir firmaya atanmadı.';
 catModal.show();
 }

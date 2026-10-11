@@ -2,7 +2,7 @@
   "name": "yildiz-alacak-apk",
   "version": "1.0.0",
   "private": true,
-  "description": "Yıldız Kumlama Boya - Alacak Takibi Android uygulaması (Capacitor)",
+  "description": "Yıldız Kumlama Boya - Emanet Stok Takibi Android uygulaması (Capacitor)",
   "dependencies": {
     "@capacitor/android": "^7.4.0",
     "@capacitor/core": "^7.4.0"

@@ -11,7 +11,7 @@ const d = auditText(a);
 return `<div class="border-bottom py-2 d-flex gap-2">
 <i class="bi ${d.icon} ${d.cls} mt-1"></i>
 <div class="flex-grow-1">
-<div class="small">${esc(d.text)}</div>
+<div class="small">${esc(emn(d.text))}</div>
 <div class="tiny text-secondary">${dt(a.created_at)} • <b>${esc(a.actor || '-')}</b>${a.firm && a.firm !== a.actor ? ' • ' + esc(a.firm) : ''}</div>
 </div>
 </div>`;
@@ -55,9 +55,9 @@ const r = await rpc('portal_admin_backup_get', { p_id: id });
 if (!r) return;
 const b = backups.find(x => x.id === id);
 const stamp = b ? new Date(b.created_at).toISOString().slice(0, 16).replace(/[:T]/g, '-') : id;
-download(JSON.stringify(r.data, null, 2), `yildiz-alacak-yedek_${stamp}.json`, 'application/json');
+download(JSON.stringify(r.data, null, 2), `yildiz-emanet-stok-yedek_${stamp}.json`, 'application/json');
 }
-const RESTORE_WARN = 'Mevcut tüm alacak kalemleri, sevkiyatlar ve hareketler bu yedekteki verilerle DEĞİŞTİRİLECEK.\n\nİşlemden önce mevcut durumun otomatik yedeği alınır.\nDevam edilsin mi?';
+const RESTORE_WARN = 'Mevcut tüm emanet stok kalemleri, sevkiyatlar ve hareketler bu yedekteki verilerle DEĞİŞTİRİLECEK.\n\nİşlemden önce mevcut durumun otomatik yedeği alınır.\nDevam edilsin mi?';
 async function restoreBackup(id) {
 if (!confirm(RESTORE_WARN)) return;
 const r = await rpc('portal_admin_backup_restore', { p_id: id });

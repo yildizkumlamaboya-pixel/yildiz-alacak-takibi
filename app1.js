@@ -12,7 +12,7 @@ const CFG = window.PORTAL_CONFIG || {};
 const CONFIGURED = CFG.SUPABASE_URL && !CFG.SUPABASE_URL.includes('YOUR_SUPABASE') && CFG.SUPABASE_KEY && !CFG.SUPABASE_KEY.includes('YOUR_SUPABASE');
 const DEMO = CFG.DEMO === true || !CONFIGURED;
 const sb = DEMO ? window.createLocalClient() : window.supabase.createClient(CFG.SUPABASE_URL, CFG.SUPABASE_KEY);
-const APP_TITLE = 'Yıldız Kumlama Boya - Alacak Takibi';
+const APP_TITLE = 'Yıldız Kumlama Boya - Emanet Stok Takibi';
 let me = null, myPass = null;
 let catalog = [], products = [], shipments = [], personnel = [], users = [], backups = [], reportMoves = [], orders = [];
 let orderFilter = 'open', editingOrder = null, convertingOrder = null, pendingSevk = null;
@@ -53,7 +53,11 @@ return less ? 'eksik' : more ? 'fazla' : null;
 }
 const lsGet = k => { try { return window.localStorage.getItem(k); } catch (e) { return null; } };
 const lsSet = (k, v) => { try { window.localStorage.setItem(k, v); } catch (e) { /* yoksay */ } };
+const emn = t => String(t ?? '').replace(/Alacağı/g, 'Emanet Stoğu').replace(/alacağı/g, 'emanet stoğu')
+.replace(/Alacaktan/g, 'Emanet stoktan').replace(/alacaktan/g, 'emanet stoktan')
+.replace(/Alacak (?=[a-zçğıöşü])/g, 'Emanet stok ').replace(/Alacak/g, 'Emanet Stok').replace(/alacak/g, 'emanet stok');
 function notify(msg, type = 'success') {
+msg = emn(msg);
 $('appToast').className = `toast align-items-center border-0 text-bg-${type}`;
 $('toastMsg').innerText = msg;
 toast.show();
@@ -143,7 +147,7 @@ $(id).innerHTML = `<div class="it-rows"></div>
 <button type="button" class="btn btn-sm btn-outline-dark w-100" onclick="addItemRow('${id}')"><i class="bi bi-plus-lg me-1"></i>Ürün Ekle</button>`;
 if (!editors[id].prods.length) {
 $(id).innerHTML = `<div class="alert alert-light border small mb-0">${isAdmin()
-? 'Bu firmaya tanımlı alacak kalemi yok. Önce Alacaklar ekranından ekleyin.'
+? 'Bu firmaya tanımlı emanet stok kalemi yok. Önce Emanet Stoklar ekranından ekleyin.'
 : 'Size tanımlı ürün yok. Yıldız Kumlama Boya ile görüşün.'}</div>`;
 return;
 }
@@ -263,13 +267,13 @@ $('bottomNav').classList.remove('d-none');
 $('logoutBtn').classList.remove('d-none');
 $('liveDot').classList.remove('d-none');
 $('userFirm').innerText = isAdmin() ? 'Yönetici' : me.name;
-$('userRoleTitle').innerText = isAdmin() ? 'Alacak Takibi' : 'Alacak Takibi';
+$('userRoleTitle').innerText = isAdmin() ? 'Emanet Stok Takibi' : 'Emanet Stok Takibi';
 document.querySelectorAll('.admin-only').forEach(el => el.classList.toggle('d-none', !isAdmin()));
 $('btn-tabSevkEt').classList.toggle('d-none', isAdmin());
 $('btn-tabUrun').classList.toggle('d-none', !isAdmin());
-$('navStokLabel').innerText = isAdmin() ? 'Alacak' : 'Kalan';
+$('navStokLabel').innerText = isAdmin() ? 'Emanet' : 'Kalan';
 $('orderTitle').innerText = isAdmin() ? 'Verilen Siparişler' : 'Yıldız Kumlama Boya Siparişleri';
-$('stockTitle').innerText = isAdmin() ? 'Kalan Alacaklar' : 'Teslim Edilecek Kalan';
+$('stockTitle').innerText = isAdmin() ? 'Kalan Emanet Stoklar' : 'Teslim Edilecek Kalan';
 setRange('month', false);
 resetShipFilterInputs();
 shipFilter = 'all'; pages.ship = pages.order = pages.moves = 1;
@@ -299,7 +303,7 @@ $('bottomNav').classList.add('d-none');
 $('logoutBtn').classList.add('d-none');
 $('liveDot').classList.add('d-none');
 $('userFirm').innerText = '';
-$('userRoleTitle').innerText = 'Alacak Takibi';
+$('userRoleTitle').innerText = 'Emanet Stok Takibi';
 loadLogins();
 }
 function armBackGuard() {
@@ -405,7 +409,7 @@ const total = r2(names.reduce((a, n) => a + byBayi[n], 0));
 $('homeHero').innerHTML = !names.length ? '' : `
 <div class="card hero p-3 mb-3">
 <div class="d-flex justify-content-between align-items-end mb-2">
-<div><div class="tiny text-secondary">Toplam kalan alacak</div><div class="big">${num(total)} L</div></div>
+<div><div class="tiny text-secondary">Toplam kalan emanet stok</div><div class="big">${num(total)} L</div></div>
 <div class="tiny text-secondary text-end">${waiting ? `<span class="text-warning-emphasis fw-semibold">${waiting} sevkiyat<br>onay bekliyor</span>` : 'Bekleyen sevkiyat yok'}${orderLine}</div>
 </div>
 <div class="d-flex flex-wrap gap-2">

@@ -1,6 +1,6 @@
 {
-  "name": "Yıldız Kumlama Boya - Alacak Takibi",
-  "short_name": "Yıldız Alacak",
+  "name": "Yıldız Kumlama Boya - Emanet Stok Takibi",
+  "short_name": "Yıldız Emanet Stok",
   "id": "./",
   "start_url": "./index.html",
   "scope": "./",
