@@ -1,3 +1,57 @@
+async function openDetail(id) {
+const s = shipments.find(x => x.id === id);
+if (!s) return;
+const pending = isPending(s);
+const canEdit = isAdmin() || (s.supplier === me.name && pending);
+const row = (k, v) => v ? `<div class="d-flex justify-content-between border-bottom py-2 small"><span class="text-secondary">${k}</span><span class="fw-medium text-end ms-3">${v}</span></div>` : '';
+$('detailBody').innerHTML = `
+<div class="mb-2">${statusBadge(s)}</div>
+${row('Gönderen', esc(s.supplier))}
+${row('İrsaliye No', '#' + esc(s.irsaliye_no))}
+${row('Sipariş No', s.order_id ? orderNoById(s.order_id) : '')}
+${row('İrsaliyeyi Düzenleyen', esc(s.prepared_by))}
+${row('Bildirilme', dt(s.created_at))}
+${row('Teslim Alan', s.approved_at ? `${esc(s.received_by || s.approved_by)} • ${dt(s.approved_at)}` : '')}
+${row('Not', esc(s.approve_note))}
+${row('Son Düzenleme', s.updated_at ? `${esc(s.updated_by)} • ${dt(s.updated_at)}` : '')}
+<div class="table-responsive mt-3">
+<table class="table table-sm align-middle mb-0">
+<thead><tr><th>Ürün</th><th class="text-end">Bildirilen</th>${pending ? '' : '<th class="text-end">Gelen</th>'}</tr></thead>
+<tbody>${s.items.map(i => `
+<tr>
+<td>${esc(i.product_name)}${i.note ? `<div class="tiny diff">${esc(i.note)}</div>` : ''}</td>
+<td class="text-end text-nowrap">${num(i.qty)} L${tnkLineI(i, i.qty)}</td>
+${pending ? '' : `<td class="text-end text-nowrap fw-semibold ${i.received_qty !== i.qty ? 'diff' : ''}">${num(i.received_qty)} L${tnkLineI(i, i.received_qty)}</td>`}
+</tr>`).join('')}
+</tbody>
+</table>
+</div>
+<div id="detailSig"></div>
+${pending && !isAdmin() ? `<div class="text-secondary tiny mt-3"><i class="bi bi-info-circle"></i> Teslim alınana kadar düzenleyebilir veya silebilirsiniz.</div>` : ''}
+${!pending && !isAdmin() ? `<div class="text-secondary tiny mt-3"><i class="bi bi-lock"></i> Teslim alınmış kayıt. Değişiklik için Yıldız Kumlama Boya'nın onayı geri alması gerekir.</div>` : ''}`;
+const btns = [];
+if (!pending)
+btns.push(`<button class="btn btn-outline-dark" onclick="afterDetail(() => openDoc(${s.id}))"><i class="bi bi-printer me-1"></i>Teslimat Belgesi / Yazdır</button>`);
+if (pending && isAdmin())
+btns.push(`<button class="btn btn-dark" onclick="afterDetail(() => openApprove(${s.id}))"><i class="bi bi-pen me-1"></i>Teslim Al & İmzala</button>`);
+if (!pending && isAdmin())
+btns.push(`<button class="btn btn-warning" onclick="busy(this, () => unapproveShipment(${s.id}))"><i class="bi bi-arrow-counterclockwise me-1"></i>Onayı Geri Al</button>`);
+if (canEdit)
+btns.push(`<div class="d-flex gap-2">
+<button class="btn btn-light border flex-fill" onclick="afterDetail(() => openEdit(${s.id}))"><i class="bi bi-pencil me-1"></i>Düzenle</button>
+<button class="btn btn-outline-danger flex-fill" onclick="busy(this, () => deleteShipment(${s.id}))"><i class="bi bi-trash me-1"></i>Sil</button>
+</div>`);
+$('detailActions').innerHTML = btns.join('') || `<button class="btn btn-light border" data-bs-dismiss="modal">Kapat</button>`;
+detailModal.show();
+if (s.has_signature || s.has_supplier_signature) {
+const r = await rpc('portal_signature', { p_id: s.id });
+const g = (r && r.data) || {};
+const box = (t, src) => src ? `<div class="col-6"><div class="small-label">${t}</div>
+<img src="${src}" class="w-100 border rounded-3 bg-white" style="height:90px;object-fit:contain"></div>` : '';
+if ($('detailSig') && (g.supplier || g.receiver))
+$('detailSig').innerHTML = `<div class="row g-2 mt-2">${box('Teslim Eden (' + esc(s.supplier) + ')', g.supplier)}${box('Teslim Alan', g.receiver)}</div>`;
+}
+}
 function afterDetail(fn) {
 $('detailModal').addEventListener('hidden.bs.modal', fn, { once: true });
 detailModal.hide();
@@ -564,72 +618,4 @@ ${dd.supplier_sig ? `<img src="${dd.supplier_sig}" alt="Teslim eden imzası">` :
 ${dd.receiver_sig ? `<img src="${dd.receiver_sig}" alt="Teslim alan imzası">` : '<div class="doc-lbl text-center mt-4">(dijital imza yok)</div>'}</div>
 </div>
 ${footer ? docFooter() : ''}`;
-}
-async function openDoc(id) {
-const s = shipments.find(x => x.id === id);
-if (!s || isPending(s)) return;
-const dd = await fetchDocData([id]);
-if (!dd) return;
-showDoc(deliveryDocHtml(s, dd[id]), docNo(s));
-}
-const BULK_MAX = 200;
-async function openBulkDocs() {
-let list = baseFilteredShipments().filter(s => !isPending(s))
-.sort((a, b) => new Date(a.approved_at) - new Date(b.approved_at) || a.id - b.id);
-if (!list.length) return notify('Filtreye uyan teslim alınmış sevkiyat yok.', 'warning');
-if (list.length > BULK_MAX) {
-if (!confirm(`${list.length} belge var. Tek seferde en fazla ${BULK_MAX} belge hazırlanır.\nİlk ${BULK_MAX} belge (en eski tarihten) hazırlansın mı?\n\nDaha azı için tarih filtresini daraltın.`)) return;
-list = list.slice(0, BULK_MAX);
-}
-const dd = await fetchDocData(list.map(s => s.id));
-if (!dd) return;
-const { f, t, byApproved } = shipDateRange();
-const toTxt = $('shipTo').value ? dOnly($('shipTo').value + 'T00:00:00') : dOnly(new Date());
-const period = (f || t) ? `${f ? dOnly(f) : 'Başlangıç'} – ${toTxt}` : 'Tüm tarihler';
-const firms = [...new Set(list.map(s => s.supplier))].sort(trCmp);
-const prodFilter = $('shipProduct').value;
-const tot = {};
-list.forEach(s => s.items.forEach(i => {
-const nh = !!i.no_hardener && hardOf(i.product_id) > 0;
-const k = (firms.length > 1 ? s.supplier + '||' : '') + i.product_name + (nh ? '||nh' : '');
-const g = tot[k] = tot[k] || { firm: s.supplier, name: i.product_name + (nh ? ' (sertleştiricisiz)' : ''), code: i.code || '', qty: 0, recv: 0, pid: i.product_id, nh, hq: null };
-g.qty += i.qty; g.recv += i.received_qty;
-if (i.hardener_qty != null) g.hq = r2((g.hq || 0) + Number(i.hardener_qty));
-}));
-const totRows = Object.values(tot).sort((a, b) => trCmp(a.firm, b.firm) || trCmp(a.name, b.name));
-const grand = r2(list.reduce((a, s) => a + shipRecv(s), 0));
-const summary = `
-${docHeader('TOPLU TESLİMAT BELGESİ', `<div>Dönem: <b>${period}</b></div><div class="doc-lbl">${byApproved ? 'Teslim tarihine göre' : 'Bildirim tarihine göre'}</div>`)}
-<table class="doc-meta mb-2">
-<tr>
-<td><div class="doc-lbl">Teslim Eden</div><div class="fw-bold d-flex align-items-center gap-2 flex-wrap">${firms.length === 1 ? firmLogo(firms[0], 26) : ''}${esc(firms.join(', '))}</div></td>
-<td><div class="doc-lbl">Teslim Alan</div><div class="fw-bold">Yıldız Kumlama Boya</div></td>
-</tr>
-<tr>
-<td><div class="doc-lbl">Belge Sayısı</div><div class="fw-bold">${list.length}</div></td>
-<td><div class="doc-lbl">Toplam Teslim Alınan</div><div class="fw-bold">${num(grand)} L</div>${prodFilter ? `<div class="doc-lbl">Ürün filtresi: ${esc(prodFilter)}</div>` : ''}</td>
-</tr>
-</table>
-<div class="doc-h2">Teslimat Listesi</div>
-<table class="doc-items doc-sum">
-<thead><tr><th style="width:28px">#</th><th>Belge No</th><th>Teslim Tarihi</th>${firms.length > 1 ? '<th>Firma</th>' : ''}<th>İrsaliye</th><th class="text-end">Teslim Alınan</th></tr></thead>
-<tbody>${list.map((s, k) => `
-<tr><td>${k + 1}</td><td>${docNo(s)}</td><td>${dt(s.approved_at)}</td>
-${firms.length > 1 ? `<td>${esc(s.supplier)}</td>` : ''}<td>${esc(s.irsaliye_no)}</td>
-<td class="text-end text-nowrap">${num(shipRecv(s))} L${shipRecv(s) !== shipQty(s) ? `<div class="doc-lbl">bildirilen ${num(shipQty(s))} L</div>` : ''}</td></tr>`).join('')}
-</tbody>
-<tfoot><tr><td colspan="${firms.length > 1 ? 5 : 4}" class="text-end">Toplam</td><td class="text-end text-nowrap">${num(grand)} L</td></tr></tfoot>
-</table>
-<div class="doc-h2">Ürün Bazında Toplam</div>
-<table class="doc-items doc-sum">
-<thead><tr>${firms.length > 1 ? '<th>Firma</th>' : ''}<th>Kod</th><th>Ürün</th><th class="text-end">Bildirilen</th><th class="text-end">Teslim Alınan</th></tr></thead>
-<tbody>${totRows.map(g => `<tr>${firms.length > 1 ? `<td>${esc(g.firm)}</td>` : ''}<td>${esc(g.code)}</td><td>${esc(g.name)}</td>
-<td class="text-end text-nowrap">${num(r2(g.qty))} L${tnkLineI({ product_id: g.pid, no_hardener: g.nh, hardener_qty: g.hq }, g.qty)}</td><td class="text-end text-nowrap fw-bold">${num(r2(g.recv))} L${tnkLineI({ product_id: g.pid, no_hardener: g.nh, hardener_qty: g.hq }, g.recv)}</td></tr>`).join('')}</tbody>
-</table>
-<div class="doc-lbl mt-2">Her teslimatın imzalı belgesi sonraki sayfalardadır.</div>
-${docFooter()}`;
-const pagesHtml = list.map(s => `<div class="doc-break"></div>${deliveryDocHtml(s, dd[s.id], false)}`).join('');
-const fileName = `Toplu-Teslimat_${firms.length === 1 ? firms[0].replace(/\s+/g, '-') + '_' : ''}${$('shipFrom').value || 'baslangic'}_${$('shipTo').value || ymd(new Date())}`;
-showDoc(summary + pagesHtml, fileName);
-notify(`${list.length} teslimat belgesi hazır. Yazdır / PDF ile tek dosya olarak kaydedebilirsiniz.`);
 }

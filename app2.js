@@ -351,7 +351,7 @@ shareData = { blob, name, text: orderShareText(o), file: new File([blob], name, 
 const img = $('shareImg');
 if (img.dataset.url) URL.revokeObjectURL(img.dataset.url);
 img.dataset.url = URL.createObjectURL(blob); img.src = img.dataset.url;
-$('shareTitle').innerText = `${orderNo(o)} • ${o.bayi}`;
+$('shareTitle').innerText = `Sipariş Özeti • ${orderNo(o)}`;
 shareModal.show();
 }
 async function shareNow() {
@@ -416,6 +416,7 @@ const late = st === 'open' && o.due_date && o.due_date < today;
 const total = r2(o.items.reduce((a, i) => a + i.qty, 0));
 return `
 <div class="card p-3">
+<div class="clickable" onclick="openOrderShare(${o.id})" title="Sipariş özetini aç">
 <div class="d-flex justify-content-between align-items-start gap-2 mb-2">
 <div>
 <div class="d-flex align-items-center gap-2 flex-wrap">
@@ -430,8 +431,10 @@ ${isAdmin() ? firmLogo(o.bayi, 20) + `<span class="badge text-bg-light border fw
 ${o.note ? `<div class="small mb-1"><i class="bi bi-chat-left-text text-secondary"></i> ${esc(o.note)}</div>` : ''}
 <div class="border-top pt-1">${o.items.map(i => `<div class="item-line"><span>${esc(i.product_name)}</span><span class="fw-medium text-nowrap">${num(i.qty)} L${tnkSpanI(i, i.qty)}</span></div>`).join('')}</div>
 ${o.items.length > 1 ? `<div class="item-line border-top mt-1 pt-1 text-secondary"><span>Toplam</span><span>${num(total)} L</span></div>` : ''}
+<div class="tiny text-primary mt-1"><i class="bi bi-eye"></i> Özeti görmek için dokunun</div>
+</div>
 ${st === 'converted' ? `<div class="tiny mt-2 clickable text-primary" onclick="openDetail(${o.shipment.id})"><i class="bi bi-truck"></i> Sevkiyat #${esc(o.shipment.irsaliye_no)} — detayı gör</div>` : ''}
-<button class="btn btn-sm btn-outline-success w-100 mt-3" onclick="busy(this, () => openOrderShare(${o.id}))"><i class="bi bi-share me-1"></i>Paylaş (WhatsApp)</button>
+<button class="btn btn-sm btn-outline-success w-100 mt-3" onclick="busy(this, () => openOrderShare(${o.id}))"><i class="bi bi-whatsapp me-1"></i>Paylaş (WhatsApp)</button>
 ${st === 'open' && !isAdmin() ? `
 <button class="btn btn-dark w-100 mt-2" onclick="convertOrder(${o.id})"><i class="bi bi-arrow-right-circle me-1"></i>Sevkiyata Dönüştür</button>` : ''}
 ${isAdmin() && st !== 'converted' ? `
@@ -558,58 +561,4 @@ if (!r) return;
 detailModal.hide();
 notify('Sevkiyat silindi.');
 await loadData();
-}
-async function openDetail(id) {
-const s = shipments.find(x => x.id === id);
-if (!s) return;
-const pending = isPending(s);
-const canEdit = isAdmin() || (s.supplier === me.name && pending);
-const row = (k, v) => v ? `<div class="d-flex justify-content-between border-bottom py-2 small"><span class="text-secondary">${k}</span><span class="fw-medium text-end ms-3">${v}</span></div>` : '';
-$('detailBody').innerHTML = `
-<div class="mb-2">${statusBadge(s)}</div>
-${row('Gönderen', esc(s.supplier))}
-${row('İrsaliye No', '#' + esc(s.irsaliye_no))}
-${row('Sipariş No', s.order_id ? orderNoById(s.order_id) : '')}
-${row('İrsaliyeyi Düzenleyen', esc(s.prepared_by))}
-${row('Bildirilme', dt(s.created_at))}
-${row('Teslim Alan', s.approved_at ? `${esc(s.received_by || s.approved_by)} • ${dt(s.approved_at)}` : '')}
-${row('Not', esc(s.approve_note))}
-${row('Son Düzenleme', s.updated_at ? `${esc(s.updated_by)} • ${dt(s.updated_at)}` : '')}
-<div class="table-responsive mt-3">
-<table class="table table-sm align-middle mb-0">
-<thead><tr><th>Ürün</th><th class="text-end">Bildirilen</th>${pending ? '' : '<th class="text-end">Gelen</th>'}</tr></thead>
-<tbody>${s.items.map(i => `
-<tr>
-<td>${esc(i.product_name)}${i.note ? `<div class="tiny diff">${esc(i.note)}</div>` : ''}</td>
-<td class="text-end text-nowrap">${num(i.qty)} L${tnkLineI(i, i.qty)}</td>
-${pending ? '' : `<td class="text-end text-nowrap fw-semibold ${i.received_qty !== i.qty ? 'diff' : ''}">${num(i.received_qty)} L${tnkLineI(i, i.received_qty)}</td>`}
-</tr>`).join('')}
-</tbody>
-</table>
-</div>
-<div id="detailSig"></div>
-${pending && !isAdmin() ? `<div class="text-secondary tiny mt-3"><i class="bi bi-info-circle"></i> Teslim alınana kadar düzenleyebilir veya silebilirsiniz.</div>` : ''}
-${!pending && !isAdmin() ? `<div class="text-secondary tiny mt-3"><i class="bi bi-lock"></i> Teslim alınmış kayıt. Değişiklik için Yıldız Kumlama Boya'nın onayı geri alması gerekir.</div>` : ''}`;
-const btns = [];
-if (!pending)
-btns.push(`<button class="btn btn-outline-dark" onclick="afterDetail(() => openDoc(${s.id}))"><i class="bi bi-printer me-1"></i>Teslimat Belgesi / Yazdır</button>`);
-if (pending && isAdmin())
-btns.push(`<button class="btn btn-dark" onclick="afterDetail(() => openApprove(${s.id}))"><i class="bi bi-pen me-1"></i>Teslim Al & İmzala</button>`);
-if (!pending && isAdmin())
-btns.push(`<button class="btn btn-warning" onclick="busy(this, () => unapproveShipment(${s.id}))"><i class="bi bi-arrow-counterclockwise me-1"></i>Onayı Geri Al</button>`);
-if (canEdit)
-btns.push(`<div class="d-flex gap-2">
-<button class="btn btn-light border flex-fill" onclick="afterDetail(() => openEdit(${s.id}))"><i class="bi bi-pencil me-1"></i>Düzenle</button>
-<button class="btn btn-outline-danger flex-fill" onclick="busy(this, () => deleteShipment(${s.id}))"><i class="bi bi-trash me-1"></i>Sil</button>
-</div>`);
-$('detailActions').innerHTML = btns.join('') || `<button class="btn btn-light border" data-bs-dismiss="modal">Kapat</button>`;
-detailModal.show();
-if (s.has_signature || s.has_supplier_signature) {
-const r = await rpc('portal_signature', { p_id: s.id });
-const g = (r && r.data) || {};
-const box = (t, src) => src ? `<div class="col-6"><div class="small-label">${t}</div>
-<img src="${src}" class="w-100 border rounded-3 bg-white" style="height:90px;object-fit:contain"></div>` : '';
-if ($('detailSig') && (g.supplier || g.receiver))
-$('detailSig').innerHTML = `<div class="row g-2 mt-2">${box('Teslim Eden (' + esc(s.supplier) + ')', g.supplier)}${box('Teslim Alan', g.receiver)}</div>`;
-}
 }
