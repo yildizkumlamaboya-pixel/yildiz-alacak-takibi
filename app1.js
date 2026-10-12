@@ -69,7 +69,12 @@ try { await fn(); } finally { btn.disabled = false; }
 }
 async function shipRpc(fn, params) {
 const r = await sb.rpc(fn + '_v2', { p_user: me.name, p_pass: myPass, ...params });
-if (r.error && /Could not find the function/.test(r.error.message)) return rpc(fn, params);
+if (r.error && /Could not find the function/.test(r.error.message)) {
+const res = await rpc(fn, params);
+if (res && (params.p_items || []).some(i => i.hardener_qty > 0))
+notify("Kaydedildi, ancak sertleştirici ayrımı saklanamadı: Supabase'de 11-sertlestirici-litre.sql çalıştırılmalı.", 'warning');
+return res;
+}
 if (r.error) { notify(r.error.message, 'danger'); if (/listeyi yenileyin/.test(r.error.message)) loadData(); return null; }
 return r;
 }
@@ -167,12 +172,10 @@ function packTxt(pk, h) {
 if (!(pk > 0)) return '';
 return h > 0 ? `${num(pk)} L teneke + ${num(h)} L sertleştirici` : h === 0 ? `${num(pk)} L teneke, sertleştiricisiz` : `${num(pk)} L teneke`;
 }
-function tnk(pid, qty, nh) {
-const pk = packOf(pid), q = Number(qty), h = hardOf(pid);
+function tnk(pid, qty) {
+const pk = packOf(pid), q = Number(qty);
 if (!pk || !(q > 0)) return '';
-if (nh && h > 0) return `${num(r2(q / pk))} teneke (sertleştiricisiz)`;
-const n = num(r2(q / setOf(pid)));
-return h > 0 ? `${n} teneke + ${n} sertleştirici` : h === 0 ? `${n} teneke (sertleştiricisiz)` : `${n} teneke`;
+return `${num(r2(q / pk))} teneke`;
 }
 const tnkSpan = (pid, qty, nh) => { const t = tnk(pid, qty, nh); return t ? ` <span class="tiny text-secondary fw-normal">(${t})</span>` : ''; };
 const tnkLine = (pid, qty, nh) => { const t = tnk(pid, qty, nh); return t ? `<div class="doc-lbl">${t}</div>` : ''; };
@@ -181,11 +184,11 @@ function tnkI(i, q) {
 const pid = i.product_id, pk = packOf(pid), h = hardOf(pid), hq = i.hardener_qty == null ? null : Number(i.hardener_qty);
 q = Number(q);
 if (!pk || !(q > 0)) return '';
-if (hq != null && h > 0) {
+if (h > 0 && hq > 0) {
 const boya = Math.max(0, r2(q - hq)), t = num(r2(boya / pk));
-return hq > 0 ? `${t} teneke + ${num(r2(hq / h))} sertleştirici (${num(boya)} L boya + ${num(hq)} L sertl.)` : `${t} teneke (sertleştiricisiz)`;
+return `${t} teneke + ${num(r2(hq / h))} sertleştirici (${num(boya)} L boya + ${num(hq)} L sertl.)`;
 }
-return tnk(pid, q, i.no_hardener);
+return `${num(r2(q / pk))} teneke${h > 0 ? ' (sertleştiricisiz)' : ''}`;
 }
 const tnkSpanI = (i, q) => { const t = tnkI(i, q); return t ? ` <span class="tiny text-secondary fw-normal">(${t})</span>` : ''; };
 const tnkLineI = (i, q) => { const t = tnkI(i, q); return t ? `<div class="doc-lbl">${t}</div>` : ''; };
