@@ -35,5 +35,22 @@ begin
     r := r || ' | portal_meta HATA: ' || sqlerrm;
   end;
 
+
+  -- 4) Firma kalemleri ve siparis/sevkiyat urun kontrolu
+  r := r || format(' | products.id tipi=%s', (select data_type from information_schema.columns
+        where table_schema = 'public' and table_name = 'products' and column_name = 'id'));
+  for x in select p.id, p.allowed_bayi, p.name, p.catalog_id from products p order by p.id limit 10 loop
+    begin
+      perform _portal_check_items(jsonb_build_array(jsonb_build_object('product_id', x.id, 'qty', 1)), '__kontrol__', 'admin');
+      r := r || format(' | kalem #%s %s (%s) TAMAM', x.id, x.name, x.allowed_bayi);
+    exception when others then
+      r := r || format(' | kalem #%s %s (%s) HATA: %s', x.id, x.name, x.allowed_bayi, sqlerrm);
+    end;
+  end loop;
+  for x in select table_name, column_name from information_schema.columns
+           where table_schema = 'public' and column_name like 'p\_%' loop
+    r := r || format(' | FAZLA SUTUN: %s.%s', x.table_name, x.column_name);
+  end loop;
+
   raise exception 'KONTROL RAPORU (degisiklik yok)%', r;
 end $$;
