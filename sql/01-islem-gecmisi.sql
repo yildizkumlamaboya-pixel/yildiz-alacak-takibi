@@ -126,3 +126,6 @@ begin
     end;
   end loop;
 end $$;
+
+-- Supabase fonksiyon listesini hemen yenile
+notify pgrst, 'reload schema';

@@ -1,4 +1,4 @@
--- KULLANICI ADI ILE GIRIS (v12) - Supabase SQL Editor'de bir kez calistirin. Tekrar calistirmak guvenlidir.
+-- 05 KULLANICI ADI ILE GIRIS - Supabase SQL Editor'de bir kez calistirin. Tekrar calistirmak guvenlidir.
 alter table public.portal_users add column if not exists username text;
 create unique index if not exists portal_users_username_uq on public.portal_users (lower(username));
 
@@ -93,3 +93,6 @@ begin
     end;
   end loop;
 end $$;
+
+-- Supabase fonksiyon listesini hemen yenile
+notify pgrst, 'reload schema';
