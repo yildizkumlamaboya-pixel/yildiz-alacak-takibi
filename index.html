@@ -329,10 +329,18 @@ main.container { max-width: 1120px !important; padding-left: 1.5rem; padding-rig
 <div class="row g-2 mb-1">
 <div class="col-6">
 <label class="small-label">Teneke (L) <span class="text-secondary">isteğe bağlı</span></label>
-<input id="catPack" type="number" inputmode="decimal" class="form-control" placeholder="ör. 20">
+<input id="catPack" type="number" inputmode="decimal" class="form-control" placeholder="ör. 18">
+</div>
+<div class="col-6">
+<label class="small-label">Sertleştirici (L) <span class="text-secondary">isteğe bağlı</span></label>
+<input id="catHard" type="number" inputmode="decimal" class="form-control" placeholder="ör. 2">
+<div class="form-check mt-1">
+<input class="form-check-input" type="checkbox" id="catNoHard" onchange="toggleNoHard(this, 'catHard')">
+<label class="form-check-label small" for="catNoHard">Sertleştiricisiz</label>
 </div>
 </div>
-<div class="form-text mb-3">Tüm ürünler <b>Litre</b> bazında takip edilir. Bir tenekenin kaç litre olduğunu yazarsanız sevkiyat, sipariş ve belgelerde teneke sayısı da hesaplanır. Eklediğiniz ürünü Emanet Stoklar ekranından firmalara atarsınız.</div>
+</div>
+<div class="form-text mb-3">Tüm ürünler <b>Litre</b> bazında takip edilir. Tenekenin (ve varsa sertleştiricinin) kaç litre olduğunu yazarsanız sevkiyat, sipariş ve belgelerde teneke sayısı da hesaplanır. Sertleştiricili üründe yazılan litre set toplamıdır: ör. 18 + 2 L ile 200 L = 10 teneke + 10 sertleştirici. Eklediğiniz ürünü Emanet Stoklar ekranından firmalara atarsınız.</div>
 <button id="catAddBtn" class="btn btn-dark w-100" onclick="busy(this, addCatalog)"><i class="bi bi-plus-lg me-1"></i>Ürünü Ekle</button>
 </div>
 <div class="d-flex justify-content-between align-items-center mb-2 px-1">
@@ -614,7 +622,10 @@ main.container { max-width: 1120px !important; padding-left: 1.5rem; padding-rig
 <div class="row g-2">
 <div class="col-4"><label class="small-label">Kod</label><input id="catEditCode" class="form-control"></div>
 <div class="col-8"><label class="small-label">Ürün Adı</label><input id="catEditName" class="form-control"></div>
-<div class="col-6"><label class="small-label">Teneke (L)</label><input id="catEditPack" type="number" inputmode="decimal" class="form-control" placeholder="ör. 20"></div>
+<div class="col-6"><label class="small-label">Teneke (L)</label><input id="catEditPack" type="number" inputmode="decimal" class="form-control" placeholder="ör. 18"></div>
+<div class="col-6"><label class="small-label">Sertleştirici (L)</label><input id="catEditHard" type="number" inputmode="decimal" class="form-control" placeholder="ör. 2">
+<div class="form-check mt-1"><input class="form-check-input" type="checkbox" id="catEditNoHard" onchange="toggleNoHard(this, 'catEditHard')">
+<label class="form-check-label small" for="catEditNoHard">Sertleştiricisiz</label></div></div>
 </div>
 <div class="form-text" id="catEditUsage"></div>
 </div>

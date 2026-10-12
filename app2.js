@@ -1,3 +1,48 @@
+function setShipFilter(f) {
+shipFilter = f;
+document.querySelectorAll('#shipFilterGroup .btn').forEach(b => b.classList.toggle('active', b.dataset.f === f));
+pages.ship = 1;
+renderShipments();
+}
+function toggleShipFilters(force) {
+const card = $('shipFilterCard');
+const show = force !== undefined ? force : card.classList.contains('d-none');
+card.classList.toggle('d-none', !show);
+$('shipFilterChev').className = 'bi ms-auto ' + (show ? 'bi-chevron-up' : 'bi-chevron-down');
+}
+function shipFiltersChanged() {
+pages.ship = 1;
+renderShipments();
+}
+function setShipRange(kind) {
+const d = new Date(); let f = null, t = null;
+if (kind === 'today') { f = new Date(d); t = new Date(d); }
+else if (kind === 'week') { f = new Date(d); f.setDate(d.getDate() - ((d.getDay() + 6) % 7)); t = new Date(d); }
+else if (kind === 'month') { f = new Date(d.getFullYear(), d.getMonth(), 1); t = new Date(d); }
+else if (kind === 'lastmonth') { f = new Date(d.getFullYear(), d.getMonth() - 1, 1); t = new Date(d.getFullYear(), d.getMonth(), 0); }
+else if (kind === 'year') { f = new Date(d.getFullYear(), 0, 1); t = new Date(d); }
+$('shipFrom').value = f ? ymd(f) : '';
+$('shipTo').value = t ? ymd(t) : '';
+shipFiltersChanged();
+}
+function resetShipFilterInputs() {
+['shipFrom', 'shipTo', 'shipFirm', 'shipProduct', 'shipSearch'].forEach(id => { $(id).value = ''; });
+$('shipDateType').value = 'created';
+}
+function clearShipFilters() {
+resetShipFilterInputs();
+setShipFilter('all');
+}
+function fillShipSelects() {
+const keep = (id, html) => { const el = $(id), cur = el.value; el.innerHTML = html; el.value = [...el.options].some(o => o.value === cur) ? cur : ''; };
+if (isAdmin()) keep('shipFirm', '<option value="">Tüm Firmalar</option>' + bayiNames().map(n => `<option value="${esc(n)}">${esc(n)}</option>`).join(''));
+const firm = isAdmin() ? $('shipFirm').value : '';
+const names = [...new Set([
+...visibleProducts().filter(p => !firm || p.allowed_bayi === firm).map(p => p.name),
+...shipments.filter(s => !firm || s.supplier === firm).flatMap(s => s.items.map(i => i.product_name))
+].filter(Boolean))].sort(trCmp);
+keep('shipProduct', '<option value="">Tüm Ürünler</option>' + names.map(n => `<option value="${esc(n)}">${esc(n)}</option>`).join(''));
+}
 function shipDateRange() {
 const from = $('shipFrom').value, to = $('shipTo').value;
 const f = from ? new Date(from + 'T00:00:00') : null;
@@ -50,7 +95,7 @@ return `<div class="item-line">
 <span>${esc(i.product_name)}</span>
 <span class="text-nowrap ${diff ? 'diff fw-semibold' : 'fw-medium'}">${diff
 ? `${num(i.qty)} → ${num(i.received_qty)} L`
-: `${num(i.qty)} L`}${tnkSpan(i.product_id, isPending(s) ? i.qty : i.received_qty)}</span>
+: `${num(i.qty)} L`}${tnkSpan(i.product_id, isPending(s) ? i.qty : i.received_qty, i.no_hardener)}</span>
 </div>`;
 }).join('');
 }
@@ -147,7 +192,7 @@ const p = prodById(i.product_id) || {};
 const oi = o ? o.items.find(x => x.product_id === i.product_id) : null;
 const diff = o && (!oi || oi.qty !== i.qty);
 return `<tr><td>${esc(p.name)}</td>${o ? `<td class="text-end text-secondary">${oi ? num(oi.qty) + ' L' : '-'}</td>` : ''}
-<td class="text-end fw-bold ${diff ? 'diff' : ''}">${num(i.qty)} L${tnkLine(i.product_id, i.qty)}</td></tr>`;
+<td class="text-end fw-bold ${diff ? 'diff' : ''}">${num(i.qty)} L${tnkLine(i.product_id, i.qty, i.no_hardener)}</td></tr>`;
 }).join('')}
 ${o ? o.items.filter(oi => !items.some(i => i.product_id === oi.product_id)).map(oi =>
 `<tr><td>${esc(oi.product_name)}</td><td class="text-end text-secondary">${num(oi.qty)} L</td><td class="text-end diff">gönderilmiyor</td></tr>`).join('') : ''}
@@ -162,7 +207,7 @@ sevkConfirmModal.show();
 async function submitShipment() {
 if (!pendingSevk) return;
 const p = pendingSevk;
-const r = await rpc('portal_create_shipment', { p_irsaliye: p.no, p_prepared_by: p.person, p_items: p.items,
+const r = await shipRpc('portal_create_shipment', { p_irsaliye: p.no, p_prepared_by: p.person, p_items: p.items,
 p_signature: p.signature, p_order_id: p.orderId });
 if (!r) return;
 sevkConfirmModal.hide();
@@ -328,7 +373,7 @@ const person = readPerson('editPerson');
 if (!person) return notify('İrsaliyeyi düzenleyen kişiyi seçin veya yazın.', 'warning');
 const items = readItems('editItems');
 if (!items) return;
-const r = await rpc('portal_update_shipment', { p_id: editing.id, p_irsaliye: no, p_prepared_by: person, p_items: items });
+const r = await shipRpc('portal_update_shipment', { p_id: editing.id, p_irsaliye: no, p_prepared_by: person, p_items: items });
 if (!r) return;
 editModal.hide();
 notify('Sevkiyat güncellendi.');
@@ -370,8 +415,8 @@ ${row('Son Düzenleme', s.updated_at ? `${esc(s.updated_by)} • ${dt(s.updated_
 <tbody>${s.items.map(i => `
 <tr>
 <td>${esc(i.product_name)}${i.note ? `<div class="tiny diff">${esc(i.note)}</div>` : ''}</td>
-<td class="text-end text-nowrap">${num(i.qty)} L${tnkLine(i.product_id, i.qty)}</td>
-${pending ? '' : `<td class="text-end text-nowrap fw-semibold ${i.received_qty !== i.qty ? 'diff' : ''}">${num(i.received_qty)} L${tnkLine(i.product_id, i.received_qty)}</td>`}
+<td class="text-end text-nowrap">${num(i.qty)} L${tnkLine(i.product_id, i.qty, i.no_hardener)}</td>
+${pending ? '' : `<td class="text-end text-nowrap fw-semibold ${i.received_qty !== i.qty ? 'diff' : ''}">${num(i.received_qty)} L${tnkLine(i.product_id, i.received_qty, i.no_hardener)}</td>`}
 </tr>`).join('')}
 </tbody>
 </table>
@@ -427,10 +472,10 @@ approving = shipments.find(s => s.id === id);
 if (!approving) return;
 $('apvInfo').innerText = `${approving.supplier} • #${approving.irsaliye_no} • Düzenleyen: ${approving.prepared_by || '-'}`;
 $('apvItems').innerHTML = approving.items.map(i => `
-<div class="item-row" data-item="${i.id}" data-qty="${i.qty}" data-pid="${i.product_id}">
+<div class="item-row" data-item="${i.id}" data-qty="${i.qty}" data-pid="${i.product_id}" data-nh="${i.no_hardener ? 1 : ''}">
 <div class="d-flex justify-content-between gap-2">
 <span class="fw-semibold small">${esc(i.product_name)}</span>
-<span class="small text-nowrap">Bildirilen: <b>${num(i.qty)} L</b>${tnkSpan(i.product_id, i.qty)}</span>
+<span class="small text-nowrap">Bildirilen: <b>${num(i.qty)} L</b>${tnkSpan(i.product_id, i.qty, i.no_hardener)}</span>
 </div>
 <div class="row g-2 mt-1 align-items-end">
 <div class="col-5">
@@ -456,7 +501,7 @@ inp.classList.toggle('border-warning', diff);
 if (!p) return;
 const after = r2(p.qty - (isNaN(rec) ? 0 : rec));
 row.querySelector('.apv-after').innerHTML =
-(!isNaN(rec) && tnk(p.id, rec) ? `<div class="text-primary">Gelen: ${tnk(p.id, rec)}</div>` : '') +
+(!isNaN(rec) && tnk(p.id, rec, !!row.dataset.nh) ? `<div class="text-primary">Gelen: ${tnk(p.id, rec, !!row.dataset.nh)}</div>` : '') +
 `Kalan emanet stok: ${num(p.qty)} → <b class="${after < 0 ? 'text-danger' : 'text-success'}">${num(after)} L</b>` +
 (diff ? `<div class="diff">${rec < qty ? `${num(qty - rec)} L eksik` : `${num(rec - qty)} L fazla`}</div>` : '');
 }
@@ -522,38 +567,4 @@ ${isAdmin() ? `<button class="btn btn-sm btn-light border" title="Düzenle" oncl
 }).join('')}</div>
 </div>`;
 }).join('');
-}
-function productOptions(list, withBayi) {
-return sortProducts(list).map(p =>
-`<option value="${p.id}">${esc((withBayi ? p.allowed_bayi + ' • ' : '') + p.name)} (Kalan: ${num(p.qty)} L)</option>`).join('');
-}
-function fillSelects() {
-const keep = (id, html) => { const el = $(id), cur = el.value; el.innerHTML = html; if ([...el.options].some(o => o.value === cur)) el.value = cur; };
-if (isAdmin()) {
-keep('adjProduct', productOptions(products, true) || '<option value="">Önce emanet stok kalemi ekleyin</option>');
-keep('repBayiSel', `<option value="">Tüm Firmalar</option>` + bayiNames().map(n => `<option value="${esc(n)}">${esc(n)}</option>`).join(''));
-const firms = [me.name, ...bayiNames()];
-keep('audFirm', '<option value="">Tüm firmalar ve işlemler</option>' + bayiNames().map(n => `<option value="${esc(n)}">${esc(n)}</option>`).join(''));
-keep('perFirm', firms.map(f => `<option value="${esc(f)}">${esc(f)}${f === me.name ? ' (teslim alanlar)' : ''}</option>`).join(''));
-const ob = $('ordBayi').value;
-keep('ordBayi', bayiNames().map(n => `<option value="${esc(n)}">${esc(n)}</option>`).join('') || '<option value="">Önce firma ekleyin</option>');
-if ($('ordBayi').value !== ob || !$('ordItems').querySelector('.it-rows, .alert')) resetOrderForm();
-fillNewCatalog();
-}
-fillRepProducts();
-}
-function openProductEdit(id) {
-editingProduct = prodById(id);
-if (!editingProduct) return;
-$('peName').innerText = `${editingProduct.name} (${editingProduct.code})`;
-$('peBayi').innerText = `Firma: ${editingProduct.allowed_bayi} • Kalan: ${num(editingProduct.qty)} L`;
-$('peCritical').value = editingProduct.critical || '';
-productModal.show();
-}
-async function saveProductEdit() {
-const r = await rpc('portal_update_product', { p_id: editingProduct.id, p_critical: parseFloat($('peCritical').value) || 0 });
-if (!r) return;
-productModal.hide();
-notify('Kalem güncellendi.');
-await loadData();
 }

@@ -1,3 +1,37 @@
+function productOptions(list, withBayi) {
+return sortProducts(list).map(p =>
+`<option value="${p.id}">${esc((withBayi ? p.allowed_bayi + ' • ' : '') + p.name)} (Kalan: ${num(p.qty)} L)</option>`).join('');
+}
+function fillSelects() {
+const keep = (id, html) => { const el = $(id), cur = el.value; el.innerHTML = html; if ([...el.options].some(o => o.value === cur)) el.value = cur; };
+if (isAdmin()) {
+keep('adjProduct', productOptions(products, true) || '<option value="">Önce emanet stok kalemi ekleyin</option>');
+keep('repBayiSel', `<option value="">Tüm Firmalar</option>` + bayiNames().map(n => `<option value="${esc(n)}">${esc(n)}</option>`).join(''));
+const firms = [me.name, ...bayiNames()];
+keep('audFirm', '<option value="">Tüm firmalar ve işlemler</option>' + bayiNames().map(n => `<option value="${esc(n)}">${esc(n)}</option>`).join(''));
+keep('perFirm', firms.map(f => `<option value="${esc(f)}">${esc(f)}${f === me.name ? ' (teslim alanlar)' : ''}</option>`).join(''));
+const ob = $('ordBayi').value;
+keep('ordBayi', bayiNames().map(n => `<option value="${esc(n)}">${esc(n)}</option>`).join('') || '<option value="">Önce firma ekleyin</option>');
+if ($('ordBayi').value !== ob || !$('ordItems').querySelector('.it-rows, .alert')) resetOrderForm();
+fillNewCatalog();
+}
+fillRepProducts();
+}
+function openProductEdit(id) {
+editingProduct = prodById(id);
+if (!editingProduct) return;
+$('peName').innerText = `${editingProduct.name} (${editingProduct.code})`;
+$('peBayi').innerText = `Firma: ${editingProduct.allowed_bayi} • Kalan: ${num(editingProduct.qty)} L`;
+$('peCritical').value = editingProduct.critical || '';
+productModal.show();
+}
+async function saveProductEdit() {
+const r = await rpc('portal_update_product', { p_id: editingProduct.id, p_critical: parseFloat($('peCritical').value) || 0 });
+if (!r) return;
+productModal.hide();
+notify('Kalem güncellendi.');
+await loadData();
+}
 async function deleteProduct() {
 const p = editingProduct;
 if (!confirm(`${p.allowed_bayi} - ${p.name} emanet stok kalemi ve hareket geçmişi silinsin mi?\n\n(Sevkiyat kaydı olan kalem silinemez.)`)) return;
@@ -57,7 +91,7 @@ return `
 <div class="card p-3 d-flex flex-row justify-content-between align-items-center">
 <div class="me-2">
 <div class="fw-semibold small">${esc(c.name)}</div>
-<div class="tiny text-secondary">${esc(c.code)} • ${c.pack_size ? `<span class="text-primary">${num(c.pack_size)} L teneke</span>` : 'Litre'} • ${used.length
+<div class="tiny text-secondary">${esc(c.code)} • ${c.pack_size ? `<span class="text-primary">${packTxt(Number(c.pack_size), c.hardener_size == null ? null : Number(c.hardener_size))}</span>` : 'Litre'} • ${used.length
 ? used.map(p => `${esc(p.allowed_bayi)}: ${num(p.qty)} L`).join(', ')
 : '<span class="fst-italic">firmaya atanmadı</span>'}</div>
 </div>
@@ -68,14 +102,37 @@ return `
 </div>`;
 }).join('');
 }
+function readHard(inputId, chkId, pack) {
+if ($(chkId).checked) return 0;
+const v = $(inputId).value;
+if (v === '') return null;
+const h = parseFloat(v);
+if (!(h > 0)) { notify('Sertleştirici litresi geçersiz.', 'warning'); return undefined; }
+if (!(pack > 0)) { notify('Sertleştirici için önce teneke litresini girin.', 'warning'); return undefined; }
+return h;
+}
+function toggleNoHard(chk, inputId) {
+$(inputId).disabled = chk.checked;
+if (chk.checked) $(inputId).value = '';
+}
+function setHardFields(inputId, chkId, h) {
+$(chkId).checked = h === 0;
+$(inputId).disabled = h === 0;
+$(inputId).value = h > 0 ? h : '';
+}
 async function addCatalog() {
 const code = $('catCode').value.trim(), name = $('catName').value.trim();
 if (!code || !name) return notify('Ürün kodu ve adını giriniz.', 'warning');
 const pack = parseFloat($('catPack').value);
 if ($('catPack').value !== '' && !(pack > 0)) return notify('Teneke litresi geçersiz.', 'warning');
-const r = await rpc('portal_catalog_add', pack > 0 ? { p_code: code, p_name: name, p_pack: pack } : { p_code: code, p_name: name });
+const hard = readHard('catHard', 'catNoHard', pack);
+if (hard === undefined) return;
+const params = { p_code: code, p_name: name };
+if (pack > 0) params.p_pack = pack;
+if (hard !== null) params.p_hard = hard;
+const r = await rpc('portal_catalog_add', params);
 if (!r) return;
-$('catCode').value = ''; $('catName').value = ''; $('catPack').value = '';
+$('catCode').value = ''; $('catName').value = ''; $('catPack').value = ''; setHardFields('catHard', 'catNoHard', null);
 notify('Ürün eklendi.');
 await loadData();
 }
@@ -85,6 +142,7 @@ if (!editingCat) return;
 $('catEditCode').value = editingCat.code;
 $('catEditName').value = editingCat.name;
 $('catEditPack').value = editingCat.pack_size ?? '';
+setHardFields('catEditHard', 'catEditNoHard', editingCat.hardener_size == null ? null : Number(editingCat.hardener_size));
 const used = products.filter(p => p.catalog_id === id).map(p => p.allowed_bayi);
 $('catEditUsage').innerText = used.length
 ? `Kullanan firmalar: ${used.join(', ')}. Yeni ad tüm emanet stok kalemlerine ve sevkiyatlara yansır.`
@@ -96,8 +154,11 @@ const code = $('catEditCode').value.trim(), name = $('catEditName').value.trim()
 if (!code || !name) return notify('Ürün kodu ve adı zorunlu.', 'warning');
 const pack = parseFloat($('catEditPack').value);
 if ($('catEditPack').value !== '' && !(pack > 0)) return notify('Teneke litresi geçersiz.', 'warning');
+const hard = readHard('catEditHard', 'catEditNoHard', pack);
+if (hard === undefined) return;
 const params = { p_id: editingCat.id, p_code: code, p_name: name };
 if (pack > 0 || editingCat.pack_size) params.p_pack = pack > 0 ? pack : null;
+if (hard !== null || editingCat.hardener_size != null) params.p_hard = hard;
 const r = await rpc('portal_catalog_update', params);
 if (!r) return;
 catModal.hide();
@@ -360,8 +421,8 @@ ${anyNote ? '<th style="width:22%">Açıklama</th>' : ''}
 <tbody>${s.items.map((i, k) => `
 <tr>
 <td>${k + 1}</td><td>${esc(i.code || '')}</td><td>${esc(i.product_name)}</td>
-<td class="text-end text-nowrap">${num(i.qty)} L${tnkLine(i.product_id, i.qty)}</td>
-<td class="text-end text-nowrap fw-bold">${num(i.received_qty)} L${tnkLine(i.product_id, i.received_qty)}</td>
+<td class="text-end text-nowrap">${num(i.qty)} L${tnkLine(i.product_id, i.qty, i.no_hardener)}</td>
+<td class="text-end text-nowrap fw-bold">${num(i.received_qty)} L${tnkLine(i.product_id, i.received_qty, i.no_hardener)}</td>
 ${anyNote ? `<td>${esc(i.note || (i.received_qty !== i.qty ? (i.received_qty < i.qty ? `${num(i.qty - i.received_qty)} L eksik` : `${num(i.received_qty - i.qty)} L fazla`) : ''))}</td>` : ''}
 </tr>`).join('')}
 </tbody>
@@ -406,8 +467,9 @@ const firms = [...new Set(list.map(s => s.supplier))].sort(trCmp);
 const prodFilter = $('shipProduct').value;
 const tot = {};
 list.forEach(s => s.items.forEach(i => {
-const k = (firms.length > 1 ? s.supplier + '||' : '') + i.product_name;
-const g = tot[k] = tot[k] || { firm: s.supplier, name: i.product_name, code: i.code || '', qty: 0, recv: 0, pid: i.product_id };
+const nh = !!i.no_hardener && hardOf(i.product_id) > 0;
+const k = (firms.length > 1 ? s.supplier + '||' : '') + i.product_name + (nh ? '||nh' : '');
+const g = tot[k] = tot[k] || { firm: s.supplier, name: i.product_name + (nh ? ' (sertleştiricisiz)' : ''), code: i.code || '', qty: 0, recv: 0, pid: i.product_id, nh };
 g.qty += i.qty; g.recv += i.received_qty;
 }));
 const totRows = Object.values(tot).sort((a, b) => trCmp(a.firm, b.firm) || trCmp(a.name, b.name));
@@ -438,7 +500,7 @@ ${firms.length > 1 ? `<td>${esc(s.supplier)}</td>` : ''}<td>${esc(s.irsaliye_no)
 <table class="doc-items doc-sum">
 <thead><tr>${firms.length > 1 ? '<th>Firma</th>' : ''}<th>Kod</th><th>Ürün</th><th class="text-end">Bildirilen</th><th class="text-end">Teslim Alınan</th></tr></thead>
 <tbody>${totRows.map(g => `<tr>${firms.length > 1 ? `<td>${esc(g.firm)}</td>` : ''}<td>${esc(g.code)}</td><td>${esc(g.name)}</td>
-<td class="text-end text-nowrap">${num(r2(g.qty))} L${tnkLine(g.pid, g.qty)}</td><td class="text-end text-nowrap fw-bold">${num(r2(g.recv))} L${tnkLine(g.pid, g.recv)}</td></tr>`).join('')}</tbody>
+<td class="text-end text-nowrap">${num(r2(g.qty))} L${tnkLine(g.pid, g.qty, g.nh)}</td><td class="text-end text-nowrap fw-bold">${num(r2(g.recv))} L${tnkLine(g.pid, g.recv, g.nh)}</td></tr>`).join('')}</tbody>
 </table>
 <div class="doc-lbl mt-2">Her teslimatın imzalı belgesi sonraki sayfalardadır.</div>
 ${docFooter()}`;
@@ -498,48 +560,4 @@ Taraflar bu miktarlar üzerinde mutabıktır.</p>
 </div>
 ${docFooter()}`;
 showDoc(html, `Mutabakat-${bayi}-${$('repTo').value || ymd(new Date())}`);
-}
-async function changeOwnPassword() {
-const oldP = $('pwOld').value, newP = $('pwNew').value, newP2 = $('pwNew2').value;
-if (!oldP || !newP) return notify('Tüm alanları doldurunuz.', 'warning');
-if (newP.length < 4) return notify('Yeni şifre en az 4 karakter olmalı.', 'warning');
-if (newP !== newP2) return notify('Yeni şifreler eşleşmiyor.', 'warning');
-const { error } = await sb.rpc('portal_change_password', { p_name: me.name, p_old: oldP, p_new: newP });
-if (error) return notify(error.message, 'danger');
-myPass = newP;
-$('pwOld').value = $('pwNew').value = $('pwNew2').value = '';
-notify('Şifreniz güncellendi.');
-}
-async function loadUsers() {
-const r = await rpc('portal_admin_users');
-if (!r) return;
-users = r.data || [];
-const rows = users.map((u, i) => ({ u, i })).filter(x => x.u.role === 'bayi');
-$('bayiList').innerHTML = !rows.length
-? `<div class="text-secondary small text-center py-2">Henüz firma yok.</div>`
-: rows.map(({ u, i }) => `
-<div class="border rounded-3 p-2 ps-3 d-flex justify-content-between align-items-center ${u.active ? '' : 'bg-light'}">
-<div>
-<div class="fw-semibold small d-flex align-items-center gap-2 ${u.active ? '' : 'text-secondary'}">${firmLogo(u.name, 20)}${esc(u.name)}</div>
-<div class="d-flex flex-wrap gap-1 mt-1">
-${u.username ? `<span class="badge text-bg-light border" style="font-size:.6rem"><i class="bi bi-person"></i> ${esc(u.username)}</span>` : ''}
-${u.has_password ? `<span class="badge text-bg-success bg-opacity-75" style="font-size:.6rem">Şifre tanımlı</span>`
-: `<span class="badge text-bg-warning" style="font-size:.6rem">Şifre yok - giriş yapamaz</span>`}
-${u.active ? '' : `<span class="badge text-bg-secondary" style="font-size:.6rem">Pasif</span>`}
-</div>
-</div>
-<div class="d-flex gap-1">
-<button onclick="openBayiModal(${i})" class="btn btn-sm btn-outline-dark" title="Şifre / logo"><i class="bi bi-pencil"></i></button>
-<button onclick="busy(this, () => toggleBayi(${i}))" class="btn btn-sm ${u.active ? 'btn-outline-danger' : 'btn-outline-success'}" title="${u.active ? 'Pasif yap' : 'Aktif yap'}">
-<i class="bi ${u.active ? 'bi-person-dash' : 'bi-person-check'}"></i>
-</button>
-</div>
-</div>`).join('');
-const act = users.filter(u => u.role === 'bayi' && u.active);
-const cur = $('newAllowedBayi').value;
-$('newAllowedBayi').innerHTML = act.length
-? act.map(u => `<option value="${esc(u.name)}">${esc(u.name)}</option>`).join('')
-: `<option value="">Önce firma ekleyin</option>`;
-if (act.some(u => u.name === cur)) $('newAllowedBayi').value = cur;
-if (me) { fillSelects(); renderPersonnel(); }
 }

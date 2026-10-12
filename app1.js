@@ -18,7 +18,7 @@ let catalog = [], products = [], shipments = [], personnel = [], users = [], bac
 let orderFilter = 'open', editingOrder = null, convertingOrder = null, pendingSevk = null;
 let shipFilter = 'all', editing = null, approving = null, signaturePad = null, sevkPad = null;
 let bayiEditingNew = false, editingProduct = null, editingCat = null;
-let META = { packs: {}, logos: {} };
+let META = { packs: {}, hards: {}, logos: {} };
 let channel = null, reloadTimer = null;
 let currentTab = 'tabOnay', navStack = [], exitTimer = null;
 const TABS = ['tabOnay', 'tabSiparis', 'tabStok', 'tabSevkEt', 'tabUrun', 'tabRapor', 'tabAyarlar'];
@@ -67,10 +67,17 @@ if (btn.disabled) return;
 btn.disabled = true;
 try { await fn(); } finally { btn.disabled = false; }
 }
+async function shipRpc(fn, params) {
+const r = await sb.rpc(fn + '_v2', { p_user: me.name, p_pass: myPass, ...params });
+if (r.error && /Could not find the function/.test(r.error.message)) return rpc(fn, params);
+if (r.error) { notify(r.error.message, 'danger'); return null; }
+return r;
+}
 async function rpc(fn, params = {}) {
 const { data, error } = await sb.rpc(fn, { p_user: me.name, p_pass: myPass, ...params });
 if (error) {
-notify(error.message, 'danger');
+const miss = /Could not find the function public\.(\w+)/.exec(error.message);
+notify(miss ? `Supabase kurulumu eksik (${miss[1]}). Size gönderilen son SQL dosyalarını SQL Editor'de çalıştırın.` : error.message, 'danger');
 if (/Oturum geçersiz/.test(error.message)) logout();
 return null;
 }
@@ -154,13 +161,22 @@ return;
 (items && items.length ? items : [{}]).forEach(it => addItemRow(id, it));
 }
 const packOf = pid => Number(META.packs[pid]) || 0;
-function tnk(pid, qty) {
-const pk = packOf(pid), q = Number(qty);
-if (!pk || !(q > 0)) return '';
-return `${num(r2(q / pk))} teneke`;
+const hardOf = pid => { const v = META.hards && META.hards[pid]; return v == null ? null : Number(v); };
+const setOf = pid => packOf(pid) + (hardOf(pid) || 0);
+function packTxt(pk, h) {
+if (!(pk > 0)) return '';
+return h > 0 ? `${num(pk)} L teneke + ${num(h)} L sertleştirici` : h === 0 ? `${num(pk)} L teneke, sertleştiricisiz` : `${num(pk)} L teneke`;
 }
-const tnkSpan = (pid, qty) => { const t = tnk(pid, qty); return t ? ` <span class="tiny text-secondary fw-normal">(${t})</span>` : ''; };
-const tnkLine = (pid, qty) => { const t = tnk(pid, qty); return t ? `<div class="doc-lbl">${t}</div>` : ''; };
+function tnk(pid, qty, nh) {
+const pk = packOf(pid), q = Number(qty), h = hardOf(pid);
+if (!pk || !(q > 0)) return '';
+if (nh && h > 0) return `${num(r2(q / pk))} teneke (sertleştiricisiz)`;
+const n = num(r2(q / setOf(pid)));
+return h > 0 ? `${n} teneke + ${n} sertleştirici` : h === 0 ? `${n} teneke (sertleştiricisiz)` : `${n} teneke`;
+}
+const tnkSpan = (pid, qty, nh) => { const t = tnk(pid, qty, nh); return t ? ` <span class="tiny text-secondary fw-normal">(${t})</span>` : ''; };
+const tnkLine = (pid, qty, nh) => { const t = tnk(pid, qty, nh); return t ? `<div class="doc-lbl">${t}</div>` : ''; };
+const SHIP_EDITORS = ['sevkItems', 'editItems'];
 function addItemRow(id, it = {}) {
 const ed = editors[id], rows = $(id).querySelector('.it-rows');
 const used = new Set([...rows.querySelectorAll('.it-prod')].map(s => Number(s.value)));
@@ -175,7 +191,7 @@ row.className = 'item-row';
 row.innerHTML = `
 <div class="d-flex gap-2 align-items-center">
 <select class="form-select form-select-sm it-prod" onchange="updateTotals('${id}')">
-${ed.prods.map(p => `<option value="${p.id}" ${p.id === pid ? 'selected' : ''}>${esc(p.name)} • Kalan ${num(p.qty)} L${packOf(p.id) ? ` • ${num(packOf(p.id))} L teneke` : ''}</option>`).join('')}
+${ed.prods.map(p => `<option value="${p.id}" ${p.id === pid ? 'selected' : ''}>${esc(p.name)} • Kalan ${num(p.qty)} L${packOf(p.id) ? ` • ${packTxt(packOf(p.id), hardOf(p.id))}` : ''}</option>`).join('')}
 </select>
 <button type="button" class="btn btn-sm btn-outline-danger" title="Satırı sil" onclick="removeItemRow(this, '${id}')"><i class="bi bi-x-lg"></i></button>
 </div>
@@ -184,6 +200,9 @@ ${ed.prods.map(p => `<option value="${p.id}" ${p.id === pid ? 'selected' : ''}>$
 <div class="tiny text-secondary">${ed.withReceived ? 'Bildirilen (L)' : 'Miktar (L)'}</div>
 <input type="number" inputmode="decimal" class="form-control form-control-sm it-qty" value="${it.qty ?? ''}" placeholder="0" oninput="updateTotals('${id}')">
 <div class="tiny text-primary it-pack mt-1"></div>
+${SHIP_EDITORS.includes(id) ? `<div class="form-check mt-1 it-nh-wrap d-none">
+<input class="form-check-input it-nh" type="checkbox" ${it.no_hardener ? 'checked' : ''} onchange="updateTotals('${id}')">
+<label class="form-check-label tiny">Sertleştiricisiz</label></div>` : ''}
 </div>
 ${ed.withReceived ? `
 <div class="col">
@@ -203,16 +222,23 @@ updateTotals(id);
 }
 function updateTotals(id) {
 const rows = [...$(id).querySelectorAll('.item-row')];
-let tk = 0, anyPack = false;
+let tk = 0, hk = 0, anyPack = false;
 rows.forEach(r => {
 const pid = Number(r.querySelector('.it-prod').value), q = parseFloat(r.querySelector('.it-qty').value) || 0;
-const h = r.querySelector('.it-pack');
-if (h) h.textContent = packOf(pid) ? (q > 0 ? `= ${tnk(pid, q)}` : `${num(packOf(pid))} L'lik teneke`) : '';
-if (packOf(pid)) { anyPack = true; tk += q / packOf(pid); }
+const h = r.querySelector('.it-pack'), w = r.querySelector('.it-nh-wrap');
+const hasHard = packOf(pid) > 0 && hardOf(pid) > 0;
+if (w) w.classList.toggle('d-none', !hasHard);
+const nh = hasHard && !!(w && r.querySelector('.it-nh').checked);
+if (h) h.textContent = packOf(pid) ? (q > 0 ? `= ${tnk(pid, q, nh)}` : (nh ? `${num(packOf(pid))} L teneke, sertleştiricisiz` : packTxt(packOf(pid), hardOf(pid)))) : '';
+if (packOf(pid)) {
+anyPack = true;
+if (nh) tk += q / packOf(pid);
+else { tk += q / setOf(pid); if (hasHard) hk += q / setOf(pid); }
+}
 });
 if (id !== 'sevkItems') return;
 const total = rows.reduce((a, r) => a + (parseFloat(r.querySelector('.it-qty').value) || 0), 0);
-$('sevkTotal').innerText = rows.length ? `${rows.length} kalem • Toplam ${num(total)} L${anyPack && tk ? ` • ${num(r2(tk))} teneke` : ''}` : '';
+$('sevkTotal').innerText = rows.length ? `${rows.length} kalem • Toplam ${num(total)} L${anyPack && tk ? ` • ${num(r2(tk))} teneke${hk ? ` + ${num(r2(hk))} sertleştirici` : ''}` : ''}` : '';
 }
 function readItems(id) {
 const ed = editors[id];
@@ -226,6 +252,8 @@ if (!(qty > 0)) { notify(`${p ? p.name : 'Ürün'}: miktar giriniz.`, 'warning')
 if (seen.has(pid)) { notify(`${p.name} iki kez eklenmiş, tek satırda toplayın.`, 'warning'); return null; }
 seen.add(pid);
 const it = { product_id: pid, qty };
+const nhBox = row.querySelector('.it-nh');
+if (nhBox && hardOf(pid) > 0) it.no_hardener = nhBox.checked;
 if (ed.withReceived) {
 const rv = row.querySelector('.it-rec').value;
 const rec = rv === '' ? qty : parseFloat(rv);
@@ -440,7 +468,7 @@ async function loadData() {
 const [r, m] = await Promise.all([rpc('portal_data'),
 sb.rpc('portal_meta', { p_user: me.name, p_pass: myPass }).catch(() => ({ error: true }))]);
 if (!r) return;
-META = m && !m.error && m.data ? { packs: m.data.packs || {}, logos: m.data.logos || {} } : { packs: {}, logos: {} };
+META = m && !m.error && m.data ? { packs: m.data.packs || {}, hards: m.data.hards || {}, logos: m.data.logos || {} } : { packs: {}, hards: {}, logos: {} };
 const d = r.data || {};
 catalog = d.catalog || [];
 products = (d.products || []).map(p => ({ ...p, qty: Number(p.qty), critical: Number(p.critical) }));
@@ -544,49 +572,4 @@ pages[key] = n;
 PAGER_RENDER[key]();
 const el = $({ ship: 'shipmentList', order: 'orderList', moves: 'repMoves', audit: 'auditList' }[key]);
 if (el) window.scrollTo({ top: Math.max(0, el.getBoundingClientRect().top + window.scrollY - 140), behavior: 'smooth' });
-}
-function setShipFilter(f) {
-shipFilter = f;
-document.querySelectorAll('#shipFilterGroup .btn').forEach(b => b.classList.toggle('active', b.dataset.f === f));
-pages.ship = 1;
-renderShipments();
-}
-function toggleShipFilters(force) {
-const card = $('shipFilterCard');
-const show = force !== undefined ? force : card.classList.contains('d-none');
-card.classList.toggle('d-none', !show);
-$('shipFilterChev').className = 'bi ms-auto ' + (show ? 'bi-chevron-up' : 'bi-chevron-down');
-}
-function shipFiltersChanged() {
-pages.ship = 1;
-renderShipments();
-}
-function setShipRange(kind) {
-const d = new Date(); let f = null, t = null;
-if (kind === 'today') { f = new Date(d); t = new Date(d); }
-else if (kind === 'week') { f = new Date(d); f.setDate(d.getDate() - ((d.getDay() + 6) % 7)); t = new Date(d); }
-else if (kind === 'month') { f = new Date(d.getFullYear(), d.getMonth(), 1); t = new Date(d); }
-else if (kind === 'lastmonth') { f = new Date(d.getFullYear(), d.getMonth() - 1, 1); t = new Date(d.getFullYear(), d.getMonth(), 0); }
-else if (kind === 'year') { f = new Date(d.getFullYear(), 0, 1); t = new Date(d); }
-$('shipFrom').value = f ? ymd(f) : '';
-$('shipTo').value = t ? ymd(t) : '';
-shipFiltersChanged();
-}
-function resetShipFilterInputs() {
-['shipFrom', 'shipTo', 'shipFirm', 'shipProduct', 'shipSearch'].forEach(id => { $(id).value = ''; });
-$('shipDateType').value = 'created';
-}
-function clearShipFilters() {
-resetShipFilterInputs();
-setShipFilter('all');
-}
-function fillShipSelects() {
-const keep = (id, html) => { const el = $(id), cur = el.value; el.innerHTML = html; el.value = [...el.options].some(o => o.value === cur) ? cur : ''; };
-if (isAdmin()) keep('shipFirm', '<option value="">Tüm Firmalar</option>' + bayiNames().map(n => `<option value="${esc(n)}">${esc(n)}</option>`).join(''));
-const firm = isAdmin() ? $('shipFirm').value : '';
-const names = [...new Set([
-...visibleProducts().filter(p => !firm || p.allowed_bayi === firm).map(p => p.name),
-...shipments.filter(s => !firm || s.supplier === firm).flatMap(s => s.items.map(i => i.product_name))
-].filter(Boolean))].sort(trCmp);
-keep('shipProduct', '<option value="">Tüm Ürünler</option>' + names.map(n => `<option value="${esc(n)}">${esc(n)}</option>`).join(''));
 }

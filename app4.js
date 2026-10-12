@@ -1,3 +1,47 @@
+async function changeOwnPassword() {
+const oldP = $('pwOld').value, newP = $('pwNew').value, newP2 = $('pwNew2').value;
+if (!oldP || !newP) return notify('Tüm alanları doldurunuz.', 'warning');
+if (newP.length < 4) return notify('Yeni şifre en az 4 karakter olmalı.', 'warning');
+if (newP !== newP2) return notify('Yeni şifreler eşleşmiyor.', 'warning');
+const { error } = await sb.rpc('portal_change_password', { p_name: me.name, p_old: oldP, p_new: newP });
+if (error) return notify(error.message, 'danger');
+myPass = newP;
+$('pwOld').value = $('pwNew').value = $('pwNew2').value = '';
+notify('Şifreniz güncellendi.');
+}
+async function loadUsers() {
+const r = await rpc('portal_admin_users');
+if (!r) return;
+users = r.data || [];
+const rows = users.map((u, i) => ({ u, i })).filter(x => x.u.role === 'bayi');
+$('bayiList').innerHTML = !rows.length
+? `<div class="text-secondary small text-center py-2">Henüz firma yok.</div>`
+: rows.map(({ u, i }) => `
+<div class="border rounded-3 p-2 ps-3 d-flex justify-content-between align-items-center ${u.active ? '' : 'bg-light'}">
+<div>
+<div class="fw-semibold small d-flex align-items-center gap-2 ${u.active ? '' : 'text-secondary'}">${firmLogo(u.name, 20)}${esc(u.name)}</div>
+<div class="d-flex flex-wrap gap-1 mt-1">
+${u.username ? `<span class="badge text-bg-light border" style="font-size:.6rem"><i class="bi bi-person"></i> ${esc(u.username)}</span>` : ''}
+${u.has_password ? `<span class="badge text-bg-success bg-opacity-75" style="font-size:.6rem">Şifre tanımlı</span>`
+: `<span class="badge text-bg-warning" style="font-size:.6rem">Şifre yok - giriş yapamaz</span>`}
+${u.active ? '' : `<span class="badge text-bg-secondary" style="font-size:.6rem">Pasif</span>`}
+</div>
+</div>
+<div class="d-flex gap-1">
+<button onclick="openBayiModal(${i})" class="btn btn-sm btn-outline-dark" title="Şifre / logo"><i class="bi bi-pencil"></i></button>
+<button onclick="busy(this, () => toggleBayi(${i}))" class="btn btn-sm ${u.active ? 'btn-outline-danger' : 'btn-outline-success'}" title="${u.active ? 'Pasif yap' : 'Aktif yap'}">
+<i class="bi ${u.active ? 'bi-person-dash' : 'bi-person-check'}"></i>
+</button>
+</div>
+</div>`).join('');
+const act = users.filter(u => u.role === 'bayi' && u.active);
+const cur = $('newAllowedBayi').value;
+$('newAllowedBayi').innerHTML = act.length
+? act.map(u => `<option value="${esc(u.name)}">${esc(u.name)}</option>`).join('')
+: `<option value="">Önce firma ekleyin</option>`;
+if (act.some(u => u.name === cur)) $('newAllowedBayi').value = cur;
+if (me) { fillSelects(); renderPersonnel(); }
+}
 function openBayiModal(i) {
 bayiEditingNew = (i === undefined);
 const u = bayiEditingNew ? null : users[i];
@@ -112,7 +156,7 @@ auditRows = data || [];
 pages.audit = 1;
 renderAudit();
 }
-const AUD_TR = { pack_size: 'Teneke (L)', irsaliye_no: 'İrsaliye', prepared_by: 'Düzenleyen', received_by: 'Teslim alan', note: 'Not', due_date: 'Termin',
+const AUD_TR = { pack_size: 'Teneke (L)', hardener_size: 'Sertleştirici (L)', irsaliye_no: 'İrsaliye', prepared_by: 'Düzenleyen', received_by: 'Teslim alan', note: 'Not', due_date: 'Termin',
 code: 'Kod', name: 'Ad', approve_note: 'Not', critical: 'Uyarı sınırı' };
 function auditText(a) {
 if (a.text) return { icon: 'bi-dot', cls: 'text-secondary', text: a.text };
