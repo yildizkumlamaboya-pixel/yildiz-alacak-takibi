@@ -136,7 +136,6 @@ $('catCode').value = ''; $('catName').value = ''; $('catPack').value = ''; setHa
 notify('Ürün eklendi.');
 await loadData();
 }
-
 function openCatEdit(id) {
 editingCat = catalog.find(c => c.id === id);
 if (!editingCat) return;
