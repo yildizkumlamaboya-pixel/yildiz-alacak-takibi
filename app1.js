@@ -464,10 +464,25 @@ await loadData();
 if (!$('tabRapor').classList.contains('d-none')) loadReport();
 }, 500);
 }
+const renderErrors = [];
+function showLoadError() {
+const box = $('loadErr');
+if (!box) return;
+box.classList.toggle('d-none', !renderErrors.length);
+box.innerHTML = renderErrors.length ? `<i class="bi bi-exclamation-octagon me-1"></i><b>Bir sorun oluştu, bu metni Claude'a iletin:</b><div class="tiny mt-1" style="word-break:break-word">${renderErrors.map(esc).join('<br>')}</div>` : '';
+}
 async function loadData() {
-const [r, m] = await Promise.all([rpc('portal_data'),
+const [res, m] = await Promise.all([sb.rpc('portal_data', { p_user: me.name, p_pass: myPass }).catch(e => ({ error: { message: String(e && e.message || e) } })),
 sb.rpc('portal_meta', { p_user: me.name, p_pass: myPass }).catch(() => ({ error: true }))]);
-if (!r) return;
+renderErrors.length = 0;
+if (res.error) {
+renderErrors.push('Veriler yüklenemedi (portal_data): ' + res.error.message);
+showLoadError();
+if (/Oturum geçersiz/.test(res.error.message)) logout();
+return;
+}
+if (m && m.error && m.error.message) renderErrors.push('portal_meta: ' + m.error.message);
+const r = res;
 META = m && !m.error && m.data ? { packs: m.data.packs || {}, hards: m.data.hards || {}, logos: m.data.logos || {} } : { packs: {}, hards: {}, logos: {} };
 const d = r.data || {};
 catalog = d.catalog || [];
@@ -495,13 +510,14 @@ window.scrollTo(0, 0);
 }
 function render() {
 if (!me) return;
-renderHome();
-renderShipments();
-renderStock();
-renderCatalog();
-renderPersonnel();
-renderOrders();
-fillSelects();
+[renderHome, renderShipments, renderStock, renderCatalog, renderPersonnel, renderOrders, fillSelects].forEach(fn => {
+try { fn(); } catch (e) {
+const msg = `${fn.name}: ${e && e.message || e}`;
+if (!renderErrors.includes(msg)) renderErrors.push(msg);
+console.error(fn.name, e);
+}
+});
+showLoadError();
 }
 function renderHome() {
 const waiting = shipments.filter(isPending).length;
@@ -566,10 +582,4 @@ return `<div class="pager">
 ${html}
 <button class="btn btn-sm btn-light border" ${cur >= total ? 'disabled' : ''} onclick="goPage('${key}', ${cur + 1})"><i class="bi bi-chevron-right"></i></button>
 </div><div class="tiny text-secondary text-center mt-1">${from}–${to} / ${count} kayıt</div>`;
-}
-function goPage(key, n) {
-pages[key] = n;
-PAGER_RENDER[key]();
-const el = $({ ship: 'shipmentList', order: 'orderList', moves: 'repMoves', audit: 'auditList' }[key]);
-if (el) window.scrollTo({ top: Math.max(0, el.getBoundingClientRect().top + window.scrollY - 140), behavior: 'smooth' });
 }

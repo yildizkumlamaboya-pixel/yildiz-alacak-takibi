@@ -1,3 +1,9 @@
+function goPage(key, n) {
+pages[key] = n;
+PAGER_RENDER[key]();
+const el = $({ ship: 'shipmentList', order: 'orderList', moves: 'repMoves', audit: 'auditList' }[key]);
+if (el) window.scrollTo({ top: Math.max(0, el.getBoundingClientRect().top + window.scrollY - 140), behavior: 'smooth' });
+}
 function setShipFilter(f) {
 shipFilter = f;
 document.querySelectorAll('#shipFilterGroup .btn').forEach(b => b.classList.toggle('active', b.dataset.f === f));
