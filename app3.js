@@ -462,8 +462,8 @@ ${anyNote ? '<th style="width:22%">Açıklama</th>' : ''}
 <tbody>${s.items.map((i, k) => `
 <tr>
 <td>${k + 1}</td><td>${esc(i.code || '')}</td><td>${esc(i.product_name)}</td>
-<td class="text-end text-nowrap">${num(i.qty)} L${tnkLine(i.product_id, i.qty, i.no_hardener)}</td>
-<td class="text-end text-nowrap fw-bold">${num(i.received_qty)} L${tnkLine(i.product_id, i.received_qty, i.no_hardener)}</td>
+<td class="text-end text-nowrap">${num(i.qty)} L${tnkLineI(i, i.qty)}</td>
+<td class="text-end text-nowrap fw-bold">${num(i.received_qty)} L${tnkLineI(i, i.received_qty)}</td>
 ${anyNote ? `<td>${esc(i.note || (i.received_qty !== i.qty ? (i.received_qty < i.qty ? `${num(i.qty - i.received_qty)} L eksik` : `${num(i.received_qty - i.qty)} L fazla`) : ''))}</td>` : ''}
 </tr>`).join('')}
 </tbody>
@@ -510,8 +510,9 @@ const tot = {};
 list.forEach(s => s.items.forEach(i => {
 const nh = !!i.no_hardener && hardOf(i.product_id) > 0;
 const k = (firms.length > 1 ? s.supplier + '||' : '') + i.product_name + (nh ? '||nh' : '');
-const g = tot[k] = tot[k] || { firm: s.supplier, name: i.product_name + (nh ? ' (sertleştiricisiz)' : ''), code: i.code || '', qty: 0, recv: 0, pid: i.product_id, nh };
+const g = tot[k] = tot[k] || { firm: s.supplier, name: i.product_name + (nh ? ' (sertleştiricisiz)' : ''), code: i.code || '', qty: 0, recv: 0, pid: i.product_id, nh, hq: null };
 g.qty += i.qty; g.recv += i.received_qty;
+if (i.hardener_qty != null) g.hq = r2((g.hq || 0) + Number(i.hardener_qty));
 }));
 const totRows = Object.values(tot).sort((a, b) => trCmp(a.firm, b.firm) || trCmp(a.name, b.name));
 const grand = r2(list.reduce((a, s) => a + shipRecv(s), 0));
@@ -541,7 +542,7 @@ ${firms.length > 1 ? `<td>${esc(s.supplier)}</td>` : ''}<td>${esc(s.irsaliye_no)
 <table class="doc-items doc-sum">
 <thead><tr>${firms.length > 1 ? '<th>Firma</th>' : ''}<th>Kod</th><th>Ürün</th><th class="text-end">Bildirilen</th><th class="text-end">Teslim Alınan</th></tr></thead>
 <tbody>${totRows.map(g => `<tr>${firms.length > 1 ? `<td>${esc(g.firm)}</td>` : ''}<td>${esc(g.code)}</td><td>${esc(g.name)}</td>
-<td class="text-end text-nowrap">${num(r2(g.qty))} L${tnkLine(g.pid, g.qty, g.nh)}</td><td class="text-end text-nowrap fw-bold">${num(r2(g.recv))} L${tnkLine(g.pid, g.recv, g.nh)}</td></tr>`).join('')}</tbody>
+<td class="text-end text-nowrap">${num(r2(g.qty))} L${tnkLineI({ product_id: g.pid, no_hardener: g.nh, hardener_qty: g.hq }, g.qty)}</td><td class="text-end text-nowrap fw-bold">${num(r2(g.recv))} L${tnkLineI({ product_id: g.pid, no_hardener: g.nh, hardener_qty: g.hq }, g.recv)}</td></tr>`).join('')}</tbody>
 </table>
 <div class="doc-lbl mt-2">Her teslimatın imzalı belgesi sonraki sayfalardadır.</div>
 ${docFooter()}`;
@@ -549,56 +550,4 @@ const pagesHtml = list.map(s => `<div class="doc-break"></div>${deliveryDocHtml(
 const fileName = `Toplu-Teslimat_${firms.length === 1 ? firms[0].replace(/\s+/g, '-') + '_' : ''}${$('shipFrom').value || 'baslangic'}_${$('shipTo').value || ymd(new Date())}`;
 showDoc(summary + pagesHtml, fileName);
 notify(`${list.length} teslimat belgesi hazır. Yazdır / PDF ile tek dosya olarak kaydedebilirsiniz.`);
-}
-async function openStatement() {
-const bayi = isAdmin() ? $('repBayiSel').value : me.name;
-if (!bayi) return notify('Mutabakat ekstresi için yukarıdan firma seçin.', 'warning');
-const { f, t } = rangeIso();
-const r = await rpc('portal_statement', { p_bayi: bayi, p_from: f ? f.toISOString() : null, p_to: t ? t.toISOString() : null });
-if (!r) return;
-const rows = (r.data || []).map(x => ({ ...x, start: Number(x.start), added: Number(x.added), delivered: Number(x.delivered), other: Number(x.other), end: Number(x.end) }));
-if (!rows.length) return notify('Bu firmaya tanımlı emanet stok kalemi yok.', 'warning');
-const sum = k => r2(rows.reduce((a, x) => a + x[k], 0));
-const periodTxt = `${f ? dOnly(f) : 'Başlangıç'} – ${$('repTo').value ? dOnly($('repTo').value + 'T00:00:00') : dOnly(new Date())}`;
-const endTxt = $('repTo').value ? dOnly($('repTo').value + 'T00:00:00') : dOnly(new Date());
-const dels = shipments.filter(s => s.supplier === bayi && !isPending(s) && (!f || new Date(s.approved_at) >= f) && (!t || new Date(s.approved_at) < t))
-.sort((a, b) => new Date(a.approved_at) - new Date(b.approved_at));
-const cell = v => `<td class="text-end text-nowrap">${num(v)}</td>`;
-const html = `
-${docHeader('EMANET STOK MUTABAKAT EKSTRESİ', `<div>Dönem: <b>${periodTxt}</b></div>`)}
-<table class="doc-meta mb-2">
-<tr>
-<td><div class="doc-lbl">Emanet Sahibi</div><div class="fw-bold">Yıldız Kumlama Boya</div></td>
-<td><div class="doc-lbl">Teslim Edecek Firma</div><div class="fw-bold d-flex align-items-center gap-2">${firmLogo(bayi, 26)}${esc(bayi)}</div></td>
-</tr>
-</table>
-<div class="doc-h2">Kalem Bazında Durum (Litre)</div>
-<table class="doc-items">
-<thead><tr><th style="width:14%">Kod</th><th>Ürün</th><th class="text-end">Dönem Başı</th><th class="text-end">Eklenen</th>
-<th class="text-end">Teslim Alınan</th><th class="text-end">Diğer*</th><th class="text-end">Dönem Sonu Kalan</th></tr></thead>
-<tbody>${rows.map(x => `<tr><td>${esc(x.code)}</td><td>${esc(x.name)}</td>${cell(x.start)}${cell(x.added)}${cell(x.delivered)}${cell(x.other)}
-<td class="text-end text-nowrap fw-bold">${num(x.end)}</td></tr>`).join('')}</tbody>
-<tfoot><tr><td colspan="2" class="text-end">Toplam</td>${cell(sum('start'))}${cell(sum('added'))}${cell(sum('delivered'))}${cell(sum('other'))}
-<td class="text-end text-nowrap">${num(sum('end'))}</td></tr></tfoot>
-</table>
-<div class="doc-lbl mt-1">* Diğer: düzeltmeler, onay iptalleri, silinen teslimatlar ve emanet stok düşümleri. Dönem Sonu = Dönem Başı + Eklenen − Teslim Alınan + Diğer.</div>
-<div class="doc-h2">Dönem İçi Teslimatlar</div>
-${dels.length ? `
-<table class="doc-items">
-<thead><tr><th style="width:1%" class="text-nowrap">Teslim Tarihi</th><th>İrsaliye</th><th>Ürün</th>
-<th class="text-end text-nowrap" style="width:1%">Bildirilen</th><th class="text-end text-nowrap" style="width:1%">Teslim Alınan</th></tr></thead>
-<tbody>${dels.flatMap(s => s.items.map(i => `<tr>
-<td class="text-nowrap">${dOnly(s.approved_at)}</td><td>${esc(s.irsaliye_no)}</td>
-<td>${esc(i.product_name)}${i.note ? `<div class="doc-lbl">${esc(i.note)}</div>` : ''}</td>
-<td class="text-end text-nowrap">${num(i.qty)}</td><td class="text-end text-nowrap fw-bold">${num(i.received_qty)}</td></tr>`)).join('')}</tbody>
-</table>` : '<div class="doc-lbl">Bu dönemde teslimat yok.</div>'}
-<p class="mt-3 mb-0">${endTxt} tarihi itibarıyla <b>${esc(bayi)}</b> firmasının Yıldız Kumlama Boya'ya teslim etmesi gereken
-kalan miktarlar yukarıdaki "Dönem Sonu Kalan" sütununda gösterilmiştir (toplam <b>${num(sum('end'))} Litre</b>).
-Taraflar bu miktarlar üzerinde mutabıktır.</p>
-<div class="doc-sign">
-<div><div class="doc-lbl">Yıldız Kumlama Boya<br>Kaşe / İmza</div></div>
-<div><div class="doc-lbl">${esc(bayi)}<br>Kaşe / İmza</div></div>
-</div>
-${docFooter()}`;
-showDoc(html, `Mutabakat-${bayi}-${$('repTo').value || ymd(new Date())}`);
 }

@@ -1,3 +1,9 @@
+function pageSlice(list, key) {
+const total = Math.max(1, Math.ceil(list.length / PAGE_SIZE));
+pages[key] = Math.min(Math.max(1, pages[key]), total);
+const start = (pages[key] - 1) * PAGE_SIZE;
+return list.slice(start, start + PAGE_SIZE);
+}
 function pagerHtml(count, key) {
 const total = Math.ceil(count / PAGE_SIZE);
 if (total <= 1) return '';
@@ -119,7 +125,7 @@ return `<div class="item-line">
 <span>${esc(i.product_name)}</span>
 <span class="text-nowrap ${diff ? 'diff fw-semibold' : 'fw-medium'}">${diff
 ? `${num(i.qty)} → ${num(i.received_qty)} L`
-: `${num(i.qty)} L`}${tnkSpan(i.product_id, isPending(s) ? i.qty : i.received_qty, i.no_hardener)}</span>
+: `${num(i.qty)} L`}${tnkSpanI(i, isPending(s) ? i.qty : i.received_qty)}</span>
 </div>`;
 }).join('');
 }
@@ -216,7 +222,7 @@ const p = prodById(i.product_id) || {};
 const oi = o ? o.items.find(x => x.product_id === i.product_id) : null;
 const diff = o && (!oi || oi.qty !== i.qty);
 return `<tr><td>${esc(p.name)}</td>${o ? `<td class="text-end text-secondary">${oi ? num(oi.qty) + ' L' : '-'}</td>` : ''}
-<td class="text-end fw-bold ${diff ? 'diff' : ''}">${num(i.qty)} L${tnkLine(i.product_id, i.qty, i.no_hardener)}</td></tr>`;
+<td class="text-end fw-bold ${diff ? 'diff' : ''}">${num(i.qty)} L${tnkLineI(i, i.qty)}</td></tr>`;
 }).join('')}
 ${o ? o.items.filter(oi => !items.some(i => i.product_id === oi.product_id)).map(oi =>
 `<tr><td>${esc(oi.product_name)}</td><td class="text-end text-secondary">${num(oi.qty)} L</td><td class="text-end diff">gönderilmiyor</td></tr>`).join('') : ''}
@@ -287,7 +293,7 @@ ${isAdmin() ? firmLogo(o.bayi, 20) + `<span class="badge text-bg-light border fw
 <div class="text-end">${orderBadge(o)}</div>
 </div>
 ${o.note ? `<div class="small mb-1"><i class="bi bi-chat-left-text text-secondary"></i> ${esc(o.note)}</div>` : ''}
-<div class="border-top pt-1">${o.items.map(i => `<div class="item-line"><span>${esc(i.product_name)}</span><span class="fw-medium text-nowrap">${num(i.qty)} L${tnkSpan(i.product_id, i.qty)}</span></div>`).join('')}</div>
+<div class="border-top pt-1">${o.items.map(i => `<div class="item-line"><span>${esc(i.product_name)}</span><span class="fw-medium text-nowrap">${num(i.qty)} L${tnkSpanI(i, i.qty)}</span></div>`).join('')}</div>
 ${o.items.length > 1 ? `<div class="item-line border-top mt-1 pt-1 text-secondary"><span>Toplam</span><span>${num(total)} L</span></div>` : ''}
 ${st === 'converted' ? `<div class="tiny mt-2 clickable text-primary" onclick="openDetail(${o.shipment.id})"><i class="bi bi-truck"></i> Sevkiyat #${esc(o.shipment.irsaliye_no)} — detayı gör</div>` : ''}
 ${st === 'open' && !isAdmin() ? `
@@ -312,7 +318,7 @@ const bayi = $('ordBayi').value;
 if (!bayi) return notify('Firma seçiniz.', 'warning');
 const items = readItems('ordItems');
 if (!items) return;
-const r = await rpc('portal_order_create', { p_bayi: bayi, p_note: $('ordNote').value.trim(), p_due_date: $('ordDue').value || null, p_items: items });
+const r = await shipRpc('portal_order_create', { p_bayi: bayi, p_note: $('ordNote').value.trim(), p_due_date: $('ordDue').value || null, p_items: items });
 if (!r) return;
 $('ordNote').value = ''; $('ordDue').value = '';
 notify(`Sipariş ${bayi} firmasına gönderildi.`);
@@ -333,7 +339,7 @@ orderModal.show();
 async function saveOrderEdit() {
 const items = readItems('ordEditItems');
 if (!items) return;
-const r = await rpc('portal_order_update', { p_id: editingOrder.id, p_note: $('ordEditNote').value.trim(),
+const r = await shipRpc('portal_order_update', { p_id: editingOrder.id, p_note: $('ordEditNote').value.trim(),
 p_due_date: $('ordEditDue').value || null, p_items: items });
 if (!r) return;
 orderModal.hide();
@@ -368,7 +374,7 @@ switchTab('tabSevkEt');
 convertingOrder = o; pendingSevk = null;
 $('sevkNo').value = '';
 personPicker('sevkPerson', me.name, '');
-itemEditor('sevkItems', visibleProducts(), o.items.filter(i => prodById(i.product_id)).map(i => ({ product_id: i.product_id, qty: i.qty })), false);
+itemEditor('sevkItems', visibleProducts(), o.items.filter(i => prodById(i.product_id)).map(i => ({ product_id: i.product_id, qty: i.qty, hardener_qty: i.hardener_qty })), false);
 $('sevkOrderBanner').innerHTML = `
 <div class="d-flex justify-content-between align-items-start gap-2">
 <div><i class="bi bi-clipboard-check me-1"></i><b>${orderNo(o)}</b> siparişi sevkiyata dönüştürülüyor.
@@ -439,8 +445,8 @@ ${row('Son Düzenleme', s.updated_at ? `${esc(s.updated_by)} • ${dt(s.updated_
 <tbody>${s.items.map(i => `
 <tr>
 <td>${esc(i.product_name)}${i.note ? `<div class="tiny diff">${esc(i.note)}</div>` : ''}</td>
-<td class="text-end text-nowrap">${num(i.qty)} L${tnkLine(i.product_id, i.qty, i.no_hardener)}</td>
-${pending ? '' : `<td class="text-end text-nowrap fw-semibold ${i.received_qty !== i.qty ? 'diff' : ''}">${num(i.received_qty)} L${tnkLine(i.product_id, i.received_qty, i.no_hardener)}</td>`}
+<td class="text-end text-nowrap">${num(i.qty)} L${tnkLineI(i, i.qty)}</td>
+${pending ? '' : `<td class="text-end text-nowrap fw-semibold ${i.received_qty !== i.qty ? 'diff' : ''}">${num(i.received_qty)} L${tnkLineI(i, i.received_qty)}</td>`}
 </tr>`).join('')}
 </tbody>
 </table>
@@ -496,10 +502,10 @@ approving = shipments.find(s => s.id === id);
 if (!approving) return;
 $('apvInfo').innerText = `${approving.supplier} • #${approving.irsaliye_no} • Düzenleyen: ${approving.prepared_by || '-'}`;
 $('apvItems').innerHTML = approving.items.map(i => `
-<div class="item-row" data-item="${i.id}" data-qty="${i.qty}" data-pid="${i.product_id}" data-nh="${i.no_hardener ? 1 : ''}">
+<div class="item-row" data-item="${i.id}" data-qty="${i.qty}" data-pid="${i.product_id}" data-nh="${i.no_hardener ? 1 : ''}" data-hq="${i.hardener_qty ?? ''}">
 <div class="d-flex justify-content-between gap-2">
 <span class="fw-semibold small">${esc(i.product_name)}</span>
-<span class="small text-nowrap">Bildirilen: <b>${num(i.qty)} L</b>${tnkSpan(i.product_id, i.qty, i.no_hardener)}</span>
+<span class="small text-nowrap">Bildirilen: <b>${num(i.qty)} L</b>${tnkSpanI(i, i.qty)}</span>
 </div>
 <div class="row g-2 mt-1 align-items-end">
 <div class="col-5">
@@ -515,6 +521,8 @@ personPicker('apvPerson', me.name, '');
 $('apvNote').value = '';
 approveModal.show();
 }
+const apvItem = row => ({ product_id: Number(row.dataset.pid), no_hardener: !!row.dataset.nh,
+hardener_qty: row.dataset.hq === '' ? null : Number(row.dataset.hq) });
 function updateApproveRow(inp) {
 const row = inp.closest('.item-row');
 const qty = Number(row.dataset.qty), p = prodById(Number(row.dataset.pid));
@@ -525,7 +533,7 @@ inp.classList.toggle('border-warning', diff);
 if (!p) return;
 const after = r2(p.qty - (isNaN(rec) ? 0 : rec));
 row.querySelector('.apv-after').innerHTML =
-(!isNaN(rec) && tnk(p.id, rec, !!row.dataset.nh) ? `<div class="text-primary">Gelen: ${tnk(p.id, rec, !!row.dataset.nh)}</div>` : '') +
+(!isNaN(rec) && tnkI(apvItem(row), rec) ? `<div class="text-primary">Gelen: ${tnkI(apvItem(row), rec)}</div>` : '') +
 `Kalan emanet stok: ${num(p.qty)} → <b class="${after < 0 ? 'text-danger' : 'text-success'}">${num(after)} L</b>` +
 (diff ? `<div class="diff">${rec < qty ? `${num(qty - rec)} L eksik` : `${num(rec - qty)} L fazla`}</div>` : '');
 }

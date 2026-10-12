@@ -70,7 +70,7 @@ try { await fn(); } finally { btn.disabled = false; }
 async function shipRpc(fn, params) {
 const r = await sb.rpc(fn + '_v2', { p_user: me.name, p_pass: myPass, ...params });
 if (r.error && /Could not find the function/.test(r.error.message)) return rpc(fn, params);
-if (r.error) { notify(r.error.message, 'danger'); return null; }
+if (r.error) { notify(r.error.message, 'danger'); if (/listeyi yenileyin/.test(r.error.message)) loadData(); return null; }
 return r;
 }
 async function rpc(fn, params = {}) {
@@ -177,6 +177,18 @@ return h > 0 ? `${n} teneke + ${n} sertleştirici` : h === 0 ? `${n} teneke (ser
 const tnkSpan = (pid, qty, nh) => { const t = tnk(pid, qty, nh); return t ? ` <span class="tiny text-secondary fw-normal">(${t})</span>` : ''; };
 const tnkLine = (pid, qty, nh) => { const t = tnk(pid, qty, nh); return t ? `<div class="doc-lbl">${t}</div>` : ''; };
 const SHIP_EDITORS = ['sevkItems', 'editItems'];
+function tnkI(i, q) {
+const pid = i.product_id, pk = packOf(pid), h = hardOf(pid), hq = i.hardener_qty == null ? null : Number(i.hardener_qty);
+q = Number(q);
+if (!pk || !(q > 0)) return '';
+if (hq != null && h > 0) {
+const boya = Math.max(0, r2(q - hq)), t = num(r2(boya / pk));
+return hq > 0 ? `${t} teneke + ${num(r2(hq / h))} sertleştirici (${num(boya)} L boya + ${num(hq)} L sertl.)` : `${t} teneke (sertleştiricisiz)`;
+}
+return tnk(pid, q, i.no_hardener);
+}
+const tnkSpanI = (i, q) => { const t = tnkI(i, q); return t ? ` <span class="tiny text-secondary fw-normal">(${t})</span>` : ''; };
+const tnkLineI = (i, q) => { const t = tnkI(i, q); return t ? `<div class="doc-lbl">${t}</div>` : ''; };
 function addItemRow(id, it = {}) {
 const ed = editors[id], rows = $(id).querySelector('.it-rows');
 const used = new Set([...rows.querySelectorAll('.it-prod')].map(s => Number(s.value)));
@@ -186,6 +198,8 @@ const free = ed.prods.find(p => !used.has(p.id));
 if (!free) return notify('Tanımlı tüm ürünler zaten eklendi.', 'warning');
 pid = free.id;
 }
+const hqInit = it.hardener_qty > 0 ? Number(it.hardener_qty) : '';
+const boyaInit = it.qty == null ? '' : (it.hardener_qty != null ? r2(Number(it.qty) - Number(it.hardener_qty)) : it.qty);
 const row = document.createElement('div');
 row.className = 'item-row';
 row.innerHTML = `
@@ -197,19 +211,20 @@ ${ed.prods.map(p => `<option value="${p.id}" ${p.id === pid ? 'selected' : ''}>$
 </div>
 <div class="row g-2 mt-1">
 <div class="col">
-<div class="tiny text-secondary">${ed.withReceived ? 'Bildirilen (L)' : 'Miktar (L)'}</div>
-<input type="number" inputmode="decimal" class="form-control form-control-sm it-qty" value="${it.qty ?? ''}" placeholder="0" oninput="updateTotals('${id}')">
-<div class="tiny text-primary it-pack mt-1"></div>
-${SHIP_EDITORS.includes(id) ? `<div class="form-check mt-1 it-nh-wrap d-none">
-<input class="form-check-input it-nh" type="checkbox" ${it.no_hardener ? 'checked' : ''} onchange="updateTotals('${id}')">
-<label class="form-check-label tiny">Sertleştiricisiz</label></div>` : ''}
+<div class="tiny text-secondary it-qlbl">${ed.withReceived ? 'Bildirilen (L)' : 'Miktar (L)'}</div>
+<input type="number" inputmode="decimal" class="form-control form-control-sm it-qty" value="${boyaInit}" placeholder="0" oninput="updateTotals('${id}')">
+</div>
+<div class="col it-hq-wrap d-none">
+<div class="tiny text-secondary">Sertleştirici (L)</div>
+<input type="number" inputmode="decimal" class="form-control form-control-sm it-hq" value="${hqInit}" placeholder="0" oninput="updateTotals('${id}')">
 </div>
 ${ed.withReceived ? `
 <div class="col">
-<div class="tiny text-secondary">Teslim alınan (L)</div>
+<div class="tiny text-secondary">Teslim alınan toplam (L)</div>
 <input type="number" inputmode="decimal" class="form-control form-control-sm it-rec" value="${it.received_qty ?? it.qty ?? ''}" placeholder="0">
 </div>` : ''}
 </div>
+<div class="tiny text-primary it-pack mt-1"></div>
 ${ed.withReceived ? `<input class="form-control form-control-sm mt-2 it-note" placeholder="Not (eksik / hasarlı)" value="${esc(it.note || '')}">` : ''}`;
 rows.appendChild(row);
 updateTotals(id);
@@ -222,22 +237,24 @@ updateTotals(id);
 }
 function updateTotals(id) {
 const rows = [...$(id).querySelectorAll('.item-row')];
-let tk = 0, hk = 0, anyPack = false;
+const ed = editors[id] || {};
+let tk = 0, hk = 0, anyPack = false, total = 0;
 rows.forEach(r => {
-const pid = Number(r.querySelector('.it-prod').value), q = parseFloat(r.querySelector('.it-qty').value) || 0;
-const h = r.querySelector('.it-pack'), w = r.querySelector('.it-nh-wrap');
-const hasHard = packOf(pid) > 0 && hardOf(pid) > 0;
-if (w) w.classList.toggle('d-none', !hasHard);
-const nh = hasHard && !!(w && r.querySelector('.it-nh').checked);
-if (h) h.textContent = packOf(pid) ? (q > 0 ? `= ${tnk(pid, q, nh)}` : (nh ? `${num(packOf(pid))} L teneke, sertleştiricisiz` : packTxt(packOf(pid), hardOf(pid)))) : '';
-if (packOf(pid)) {
-anyPack = true;
-if (nh) tk += q / packOf(pid);
-else { tk += q / setOf(pid); if (hasHard) hk += q / setOf(pid); }
-}
+const pid = Number(r.querySelector('.it-prod').value), pk = packOf(pid), hl = hardOf(pid);
+const hasHard = pk > 0 && hl > 0;
+r.querySelector('.it-hq-wrap').classList.toggle('d-none', !hasHard);
+r.querySelector('.it-qlbl').textContent = (ed.withReceived ? 'Bildirilen ' : '') + (hasHard ? 'boya (L)' : 'miktar (L)').replace(/^./, c => ed.withReceived ? c : c.toUpperCase());
+const b = parseFloat(r.querySelector('.it-qty').value) || 0;
+const hq = hasHard ? (parseFloat(r.querySelector('.it-hq').value) || 0) : 0;
+r.querySelector('.it-hq').placeholder = hasHard && b > 0 ? `öneri ${num(r2(b / pk * hl))}` : '0';
+total += b + hq;
+const h = r.querySelector('.it-pack');
+if (h) h.textContent = !pk ? '' : (b > 0 || hq > 0)
+? `= ${num(r2(b / pk))} teneke${hasHard ? (hq > 0 ? ` + ${num(r2(hq / hl))} sertleştirici • toplam ${num(r2(b + hq))} L emanetten düşer` : ' (sertleştiricisiz)') : ''}`
+: packTxt(pk, hl);
+if (pk) { anyPack = true; tk += b / pk; if (hasHard) hk += hq / hl; }
 });
 if (id !== 'sevkItems') return;
-const total = rows.reduce((a, r) => a + (parseFloat(r.querySelector('.it-qty').value) || 0), 0);
 $('sevkTotal').innerText = rows.length ? `${rows.length} kalem • Toplam ${num(total)} L${anyPack && tk ? ` • ${num(r2(tk))} teneke${hk ? ` + ${num(r2(hk))} sertleştirici` : ''}` : ''}` : '';
 }
 function readItems(id) {
@@ -247,13 +264,16 @@ const out = [], seen = new Set();
 for (const row of $(id).querySelectorAll('.item-row')) {
 const pid = Number(row.querySelector('.it-prod').value);
 const p = ed.prods.find(x => x.id === pid);
-const qty = parseFloat(row.querySelector('.it-qty').value);
+const hasHard = packOf(pid) > 0 && hardOf(pid) > 0;
+const bv = row.querySelector('.it-qty').value, hv = hasHard ? row.querySelector('.it-hq').value : '';
+const b = bv === '' ? 0 : parseFloat(bv), hq = hv === '' ? 0 : parseFloat(hv);
+if (!(b >= 0) || !(hq >= 0)) { notify(`${p ? p.name : 'Ürün'}: miktar geçersiz.`, 'warning'); return null; }
+const qty = r2(b + hq);
 if (!(qty > 0)) { notify(`${p ? p.name : 'Ürün'}: miktar giriniz.`, 'warning'); return null; }
 if (seen.has(pid)) { notify(`${p.name} iki kez eklenmiş, tek satırda toplayın.`, 'warning'); return null; }
 seen.add(pid);
 const it = { product_id: pid, qty };
-const nhBox = row.querySelector('.it-nh');
-if (nhBox && hardOf(pid) > 0) it.no_hardener = nhBox.checked;
+if (hasHard) { it.hardener_qty = r2(hq); it.no_hardener = hq === 0; }
 if (ed.withReceived) {
 const rv = row.querySelector('.it-rec').value;
 const rec = rv === '' ? qty : parseFloat(rv);
@@ -567,9 +587,3 @@ ${firmLogo(n, 22)}<span class="small fw-semibold">${num(byBayi[n])} L</span></di
 const PAGE_SIZE = 20;
 const pages = { ship: 1, order: 1, moves: 1, audit: 1 };
 const PAGER_RENDER = { ship: () => renderShipments(), order: () => renderOrders(), moves: () => renderMovesList(), audit: () => renderAudit() };
-function pageSlice(list, key) {
-const total = Math.max(1, Math.ceil(list.length / PAGE_SIZE));
-pages[key] = Math.min(Math.max(1, pages[key]), total);
-const start = (pages[key] - 1) * PAGE_SIZE;
-return list.slice(start, start + PAGE_SIZE);
-}

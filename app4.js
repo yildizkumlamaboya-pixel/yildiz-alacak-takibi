@@ -1,3 +1,55 @@
+async function openStatement() {
+const bayi = isAdmin() ? $('repBayiSel').value : me.name;
+if (!bayi) return notify('Mutabakat ekstresi için yukarıdan firma seçin.', 'warning');
+const { f, t } = rangeIso();
+const r = await rpc('portal_statement', { p_bayi: bayi, p_from: f ? f.toISOString() : null, p_to: t ? t.toISOString() : null });
+if (!r) return;
+const rows = (r.data || []).map(x => ({ ...x, start: Number(x.start), added: Number(x.added), delivered: Number(x.delivered), other: Number(x.other), end: Number(x.end) }));
+if (!rows.length) return notify('Bu firmaya tanımlı emanet stok kalemi yok.', 'warning');
+const sum = k => r2(rows.reduce((a, x) => a + x[k], 0));
+const periodTxt = `${f ? dOnly(f) : 'Başlangıç'} – ${$('repTo').value ? dOnly($('repTo').value + 'T00:00:00') : dOnly(new Date())}`;
+const endTxt = $('repTo').value ? dOnly($('repTo').value + 'T00:00:00') : dOnly(new Date());
+const dels = shipments.filter(s => s.supplier === bayi && !isPending(s) && (!f || new Date(s.approved_at) >= f) && (!t || new Date(s.approved_at) < t))
+.sort((a, b) => new Date(a.approved_at) - new Date(b.approved_at));
+const cell = v => `<td class="text-end text-nowrap">${num(v)}</td>`;
+const html = `
+${docHeader('EMANET STOK MUTABAKAT EKSTRESİ', `<div>Dönem: <b>${periodTxt}</b></div>`)}
+<table class="doc-meta mb-2">
+<tr>
+<td><div class="doc-lbl">Emanet Sahibi</div><div class="fw-bold">Yıldız Kumlama Boya</div></td>
+<td><div class="doc-lbl">Teslim Edecek Firma</div><div class="fw-bold d-flex align-items-center gap-2">${firmLogo(bayi, 26)}${esc(bayi)}</div></td>
+</tr>
+</table>
+<div class="doc-h2">Kalem Bazında Durum (Litre)</div>
+<table class="doc-items">
+<thead><tr><th style="width:14%">Kod</th><th>Ürün</th><th class="text-end">Dönem Başı</th><th class="text-end">Eklenen</th>
+<th class="text-end">Teslim Alınan</th><th class="text-end">Diğer*</th><th class="text-end">Dönem Sonu Kalan</th></tr></thead>
+<tbody>${rows.map(x => `<tr><td>${esc(x.code)}</td><td>${esc(x.name)}</td>${cell(x.start)}${cell(x.added)}${cell(x.delivered)}${cell(x.other)}
+<td class="text-end text-nowrap fw-bold">${num(x.end)}</td></tr>`).join('')}</tbody>
+<tfoot><tr><td colspan="2" class="text-end">Toplam</td>${cell(sum('start'))}${cell(sum('added'))}${cell(sum('delivered'))}${cell(sum('other'))}
+<td class="text-end text-nowrap">${num(sum('end'))}</td></tr></tfoot>
+</table>
+<div class="doc-lbl mt-1">* Diğer: düzeltmeler, onay iptalleri, silinen teslimatlar ve emanet stok düşümleri. Dönem Sonu = Dönem Başı + Eklenen − Teslim Alınan + Diğer.</div>
+<div class="doc-h2">Dönem İçi Teslimatlar</div>
+${dels.length ? `
+<table class="doc-items">
+<thead><tr><th style="width:1%" class="text-nowrap">Teslim Tarihi</th><th>İrsaliye</th><th>Ürün</th>
+<th class="text-end text-nowrap" style="width:1%">Bildirilen</th><th class="text-end text-nowrap" style="width:1%">Teslim Alınan</th></tr></thead>
+<tbody>${dels.flatMap(s => s.items.map(i => `<tr>
+<td class="text-nowrap">${dOnly(s.approved_at)}</td><td>${esc(s.irsaliye_no)}</td>
+<td>${esc(i.product_name)}${i.note ? `<div class="doc-lbl">${esc(i.note)}</div>` : ''}</td>
+<td class="text-end text-nowrap">${num(i.qty)}</td><td class="text-end text-nowrap fw-bold">${num(i.received_qty)}</td></tr>`)).join('')}</tbody>
+</table>` : '<div class="doc-lbl">Bu dönemde teslimat yok.</div>'}
+<p class="mt-3 mb-0">${endTxt} tarihi itibarıyla <b>${esc(bayi)}</b> firmasının Yıldız Kumlama Boya'ya teslim etmesi gereken
+kalan miktarlar yukarıdaki "Dönem Sonu Kalan" sütununda gösterilmiştir (toplam <b>${num(sum('end'))} Litre</b>).
+Taraflar bu miktarlar üzerinde mutabıktır.</p>
+<div class="doc-sign">
+<div><div class="doc-lbl">Yıldız Kumlama Boya<br>Kaşe / İmza</div></div>
+<div><div class="doc-lbl">${esc(bayi)}<br>Kaşe / İmza</div></div>
+</div>
+${docFooter()}`;
+showDoc(html, `Mutabakat-${bayi}-${$('repTo').value || ymd(new Date())}`);
+}
 async function changeOwnPassword() {
 const oldP = $('pwOld').value, newP = $('pwNew').value, newP2 = $('pwNew2').value;
 if (!oldP || !newP) return notify('Tüm alanları doldurunuz.', 'warning');
