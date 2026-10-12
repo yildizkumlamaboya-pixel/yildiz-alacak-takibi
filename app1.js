@@ -344,6 +344,7 @@ pushEnable(false);
 function logout() {
 if (me) pushDetach(me.name, myPass);
 $('pushAsk').classList.add('d-none');
+$('ordFormCard').classList.add('d-none'); $('ordOpenBtn').classList.remove('d-none');
 sessionSet(null);
 me = null; myPass = null;
 navStack = []; currentTab = 'tabOnay'; clearTimeout(exitTimer);

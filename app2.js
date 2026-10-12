@@ -452,6 +452,17 @@ if (!isAdmin()) return;
 const bayi = $('ordBayi').value;
 itemEditor('ordItems', products.filter(p => p.allowed_bayi === bayi), [], false);
 }
+function toggleOrderForm(open) {
+if (open && !isAdmin()) return;
+$('ordFormCard').classList.toggle('d-none', !open);
+$('ordOpenBtn').classList.toggle('d-none', !!open);
+if (open) {
+resetOrderForm();
+$('ordFormCard').scrollIntoView({ behavior: 'smooth', block: 'start' });
+} else {
+$('ordNote').value = ''; $('ordDue').value = '';
+}
+}
 async function createOrder() {
 const bayi = $('ordBayi').value;
 if (!bayi) return notify('Firma seçiniz.', 'warning');
@@ -462,7 +473,7 @@ if (!r) return;
 $('ordNote').value = ''; $('ordDue').value = '';
 notify(`Sipariş ${bayi} firmasına gönderildi.`);
 await loadData();
-resetOrderForm();
+toggleOrderForm(false);
 setOrderFilter('open');
 }
 function openOrderEdit(id) {
