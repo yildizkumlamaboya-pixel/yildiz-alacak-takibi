@@ -22,6 +22,7 @@ create or replace function public.portal_catalog_add(p_user text, p_pass text, p
 returns bigint
 language plpgsql security definer set search_path = public, extensions
 as $$
+#variable_conflict use_variable
 declare v_id bigint;
 begin
   perform _portal_require(p_user, p_pass, true);
@@ -39,6 +40,7 @@ create or replace function public.portal_catalog_update(p_user text, p_pass text
 returns void
 language plpgsql security definer set search_path = public, extensions
 as $$
+#variable_conflict use_variable
 begin
   perform _portal_require(p_user, p_pass, true);
   if not exists (select 1 from catalog where id = p_id) then raise exception 'Ürün bulunamadı'; end if;
