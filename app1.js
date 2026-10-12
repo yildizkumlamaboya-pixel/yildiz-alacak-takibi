@@ -28,6 +28,7 @@ const detailModal = new bootstrap.Modal('#detailModal');
 const productModal = new bootstrap.Modal('#productModal');
 const catModal = new bootstrap.Modal('#catModal');
 const bayiModal = new bootstrap.Modal('#bayiModal');
+const shareModal = new bootstrap.Modal('#shareModal');
 const orderModal = new bootstrap.Modal('#orderModal');
 const sevkConfirmModal = new bootstrap.Modal('#sevkConfirmModal');
 const toast = new bootstrap.Toast('#appToast', { delay: 3200 });

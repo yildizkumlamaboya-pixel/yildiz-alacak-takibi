@@ -247,6 +247,141 @@ resetSevkForm();
 navStack = [];
 switchTab('tabOnay', true);
 }
+let shareData = null;
+function loadImg(src) {
+return new Promise(res => { if (!src) return res(null); const im = new Image(); im.onload = () => res(im); im.onerror = () => res(null); im.src = src; });
+}
+function wrapLines(ctx, text, maxW) {
+const words = String(text || '').split(/\s+/), out = [];
+let line = '';
+words.forEach(w => {
+const t = line ? line + ' ' + w : w;
+if (ctx.measureText(t).width > maxW && line) { out.push(line); line = w; } else line = t;
+});
+if (line) out.push(line);
+return out.length ? out : [''];
+}
+function orderShareText(o) {
+const st = orderState(o);
+const lines = [`*SİPARİŞ ${orderNo(o)}*`, `Yıldız Kumlama Boya → ${o.bayi}`, `Tarih: ${dt(o.created_at)}`];
+if (o.due_date) lines.push(`Termin: ${dOnly(o.due_date + 'T00:00:00')}`);
+if (st !== 'open') lines.push(`Durum: ${st === 'cancelled' ? 'İptal' : 'Sevkiyata dönüştü'}`);
+lines.push('');
+o.items.forEach(i => { const t = tnkI(i, i.qty); lines.push(`• ${i.product_name}: *${num(i.qty)} L*${t ? ` — ${t}` : ''}`); });
+const total = r2(o.items.reduce((a, i) => a + i.qty, 0));
+if (o.items.length > 1) lines.push(`Toplam: ${num(total)} L`);
+if (o.note) lines.push('', `Not: ${o.note}`);
+return lines.join('\n');
+}
+async function drawOrderImage(o) {
+const W = 1080, P = 64, c = document.createElement('canvas'), ctx = c.getContext('2d');
+const F = (w, s) => `${w} ${s}px Inter, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif`;
+const st = orderState(o), total = r2(o.items.reduce((a, i) => a + i.qty, 0));
+ctx.font = F(600, 34);
+const rows = o.items.map(i => {
+ctx.font = F(600, 34); const name = wrapLines(ctx, i.product_name, W - 2 * P - 300);
+ctx.font = F(400, 26); const t = tnkI(i, i.qty), sub = t ? wrapLines(ctx, t, W - 2 * P - 40) : [];
+return { i, name, sub, h: 34 + name.length * 44 + sub.length * 34 + 22 };
+});
+ctx.font = F(600, 30);
+const noteL = o.note ? wrapLines(ctx, 'Not: ' + o.note, W - 2 * P - 48) : [];
+const H = 230 + 250 + 70 + rows.reduce((a, r) => a + r.h, 0) + (o.items.length > 1 ? 80 : 0) + (noteL.length ? 70 + noteL.length * 40 : 0) + 120;
+c.width = W; c.height = H;
+ctx.fillStyle = '#ffffff'; ctx.fillRect(0, 0, W, H);
+ctx.fillStyle = '#111111'; ctx.fillRect(0, 0, W, 200);
+ctx.fillStyle = '#FFD41F'; ctx.fillRect(0, 200, W, 10);
+const myL = (META.logos && META.logos['Yıldız Kumlama Boya']) || LOGOS['Yıldız Kumlama Boya'];
+const logo = await loadImg(myL && myL.src);
+ctx.fillStyle = '#ffffff';
+if (logo) {
+const lh = 120, lw = Math.min(460, lh * (logo.width / logo.height));
+ctx.fillRect(P - 16, 40, lw + 32, lh + 0);
+ctx.drawImage(logo, P, 40, lw, lh);
+} else { ctx.font = F(800, 52); ctx.fillText('YILDIZ KUMLAMA BOYA', P, 120); }
+ctx.textAlign = 'right'; ctx.fillStyle = '#FFD41F'; ctx.font = F(800, 46); ctx.fillText('SİPARİŞ', W - P, 98);
+ctx.fillStyle = '#ffffff'; ctx.font = F(600, 32); ctx.fillText(orderNo(o), W - P, 146);
+ctx.textAlign = 'left';
+let y = 250;
+const firmL = (META.logos && META.logos[o.bayi]) || LOGOS[o.bayi], fl = await loadImg(firmL && firmL.src);
+ctx.fillStyle = '#f4f5f7'; ctx.fillRect(P, y, W - 2 * P, 210);
+ctx.fillStyle = '#6b7280'; ctx.font = F(500, 24); ctx.fillText('FİRMA', P + 28, y + 44);
+ctx.fillStyle = '#111111'; ctx.font = F(700, 40); ctx.fillText(o.bayi, P + 28, y + 92);
+if (fl) { const h2 = 90, w2 = Math.min(240, h2 * fl.width / fl.height); ctx.drawImage(fl, W - P - 28 - w2, y + 24, w2, h2); }
+ctx.fillStyle = '#6b7280'; ctx.font = F(500, 24);
+ctx.fillText('SİPARİŞ TARİHİ', P + 28, y + 146); if (o.due_date) ctx.fillText('TERMİN', P + 420, y + 146);
+ctx.fillStyle = '#111111'; ctx.font = F(600, 30);
+ctx.fillText(dt(o.created_at), P + 28, y + 186); if (o.due_date) ctx.fillText(dOnly(o.due_date + 'T00:00:00'), P + 420, y + 186);
+if (st !== 'open') {
+ctx.textAlign = 'right'; ctx.fillStyle = st === 'cancelled' ? '#dc3545' : '#198754'; ctx.font = F(800, 30);
+ctx.fillText(st === 'cancelled' ? 'İPTAL' : 'SEVKİYATA DÖNÜŞTÜ', W - P - 28, y + 186); ctx.textAlign = 'left';
+}
+y += 250;
+ctx.fillStyle = '#6b7280'; ctx.font = F(600, 24); ctx.fillText('ÜRÜN', P, y); ctx.textAlign = 'right'; ctx.fillText('MİKTAR', W - P, y); ctx.textAlign = 'left';
+y += 18; ctx.fillStyle = '#111111'; ctx.fillRect(P, y, W - 2 * P, 3); y += 22;
+rows.forEach(r => {
+let yy = y + 34;
+ctx.fillStyle = '#111111'; ctx.font = F(600, 34);
+r.name.forEach((l, k) => ctx.fillText(l, P, yy + k * 44));
+ctx.textAlign = 'right'; ctx.font = F(800, 40); ctx.fillText(`${num(r.i.qty)} L`, W - P, yy + 4); ctx.textAlign = 'left';
+yy += r.name.length * 44 - 6;
+ctx.fillStyle = '#b45309'; ctx.font = F(500, 26); r.sub.forEach((l, k) => ctx.fillText(l, P, yy + k * 34));
+y += r.h;
+ctx.fillStyle = '#e5e7eb'; ctx.fillRect(P, y - 8, W - 2 * P, 2);
+});
+if (o.items.length > 1) {
+y += 50; ctx.fillStyle = '#111111'; ctx.font = F(800, 36); ctx.fillText('TOPLAM', P, y);
+ctx.textAlign = 'right'; ctx.fillText(`${num(total)} L`, W - P, y); ctx.textAlign = 'left'; y += 30;
+}
+if (noteL.length) {
+y += 40; ctx.fillStyle = '#fff7d6'; ctx.fillRect(P, y, W - 2 * P, 40 + noteL.length * 40);
+ctx.fillStyle = '#111111'; ctx.font = F(600, 30); noteL.forEach((l, k) => ctx.fillText(l, P + 24, y + 48 + k * 40));
+y += 40 + noteL.length * 40;
+}
+ctx.fillStyle = '#9ca3af'; ctx.font = F(400, 22);
+ctx.fillText(`Yıldız Kumlama Boya • Emanet Stok Takibi • ${dt(new Date())}`, P, H - 40);
+return new Promise(res => c.toBlob(b => res(b), 'image/png'));
+}
+async function openOrderShare(id) {
+const o = orders.find(x => x.id === id);
+if (!o) return;
+const blob = await drawOrderImage(o);
+if (!blob) return notify('Görsel oluşturulamadı.', 'danger');
+const name = `${orderNo(o)}_${o.bayi}.png`.replace(/[^\wçğıöşüÇĞİÖŞÜ.-]+/g, '_');
+shareData = { blob, name, text: orderShareText(o), file: new File([blob], name, { type: 'image/png' }) };
+const img = $('shareImg');
+if (img.dataset.url) URL.revokeObjectURL(img.dataset.url);
+img.dataset.url = URL.createObjectURL(blob); img.src = img.dataset.url;
+$('shareTitle').innerText = `${orderNo(o)} • ${o.bayi}`;
+shareModal.show();
+}
+async function shareNow() {
+if (!shareData) return;
+const files = [shareData.file];
+try {
+if (navigator.canShare && navigator.canShare({ files })) {
+await navigator.share({ files, title: shareData.name, text: shareData.text });
+return;
+}
+} catch (e) { if (e && e.name === 'AbortError') return; }
+shareDownload();
+notify('Görsel indirildi; WhatsApp açılıyor, görseli oradan ekleyebilirsiniz.', 'secondary');
+setTimeout(shareText, 600);
+}
+function shareDownload() {
+if (!shareData) return;
+if (ANDROID()) {
+const fr = new FileReader();
+fr.onload = () => { try { window.AndroidBridge.saveFile(shareData.name, String(fr.result).split(',')[1], 'image/png'); } catch (e) { /* yoksay */ } };
+fr.readAsDataURL(shareData.blob);
+return;
+}
+const a = document.createElement('a'); a.href = URL.createObjectURL(shareData.blob); a.download = shareData.name;
+document.body.appendChild(a); a.click(); setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 1000);
+}
+function shareText() {
+if (!shareData) return;
+window.open('https://wa.me/?text=' + encodeURIComponent(shareData.text), '_blank');
+}
 const orderNo = o => `SIP-${new Date(o.created_at).getFullYear()}-${String(o.id).padStart(4, '0')}`;
 const orderNoById = id => { const o = orders.find(x => x.id === id); return o ? orderNo(o) : `SIP-${String(id).padStart(4, '0')}`; };
 const orderState = o => o.cancelled ? 'cancelled' : o.shipment ? 'converted' : 'open';
@@ -296,8 +431,9 @@ ${o.note ? `<div class="small mb-1"><i class="bi bi-chat-left-text text-secondar
 <div class="border-top pt-1">${o.items.map(i => `<div class="item-line"><span>${esc(i.product_name)}</span><span class="fw-medium text-nowrap">${num(i.qty)} L${tnkSpanI(i, i.qty)}</span></div>`).join('')}</div>
 ${o.items.length > 1 ? `<div class="item-line border-top mt-1 pt-1 text-secondary"><span>Toplam</span><span>${num(total)} L</span></div>` : ''}
 ${st === 'converted' ? `<div class="tiny mt-2 clickable text-primary" onclick="openDetail(${o.shipment.id})"><i class="bi bi-truck"></i> Sevkiyat #${esc(o.shipment.irsaliye_no)} — detayı gör</div>` : ''}
+<button class="btn btn-sm btn-outline-success w-100 mt-3" onclick="busy(this, () => openOrderShare(${o.id}))"><i class="bi bi-share me-1"></i>Paylaş (WhatsApp)</button>
 ${st === 'open' && !isAdmin() ? `
-<button class="btn btn-dark w-100 mt-3" onclick="convertOrder(${o.id})"><i class="bi bi-arrow-right-circle me-1"></i>Sevkiyata Dönüştür</button>` : ''}
+<button class="btn btn-dark w-100 mt-2" onclick="convertOrder(${o.id})"><i class="bi bi-arrow-right-circle me-1"></i>Sevkiyata Dönüştür</button>` : ''}
 ${isAdmin() && st !== 'converted' ? `
 <div class="d-flex gap-2 mt-3">
 ${st === 'open' ? `<button class="btn btn-sm btn-light border flex-fill" onclick="openOrderEdit(${o.id})"><i class="bi bi-pencil me-1"></i>Düzenle</button>` : ''}
@@ -476,86 +612,4 @@ const box = (t, src) => src ? `<div class="col-6"><div class="small-label">${t}<
 if ($('detailSig') && (g.supplier || g.receiver))
 $('detailSig').innerHTML = `<div class="row g-2 mt-2">${box('Teslim Eden (' + esc(s.supplier) + ')', g.supplier)}${box('Teslim Alan', g.receiver)}</div>`;
 }
-}
-function afterDetail(fn) {
-$('detailModal').addEventListener('hidden.bs.modal', fn, { once: true });
-detailModal.hide();
-}
-async function unapproveShipment(id) {
-const s = shipments.find(x => x.id === id);
-if (!s) return;
-const reason = prompt(
-`#${s.irsaliye_no} numaralı sevkiyatın onayı geri alınacak.\n\n` +
-`• Teslim alınan miktarlar ${s.supplier} emanet stoğuna geri eklenecek\n` +
-`• İmza silinecek, kayıt "Onay Bekliyor" durumuna dönecek\n` +
-`• ${s.supplier} kaydı tekrar düzenleyebilecek\n\nAçıklama (isteğe bağlı):`, '');
-if (reason === null) return;
-const r = await rpc('portal_unapprove_shipment', { p_id: id, p_reason: reason });
-if (!r) return;
-detailModal.hide();
-notify('Onay geri alındı, emanet stok geri eklendi.');
-await loadData();
-}
-$('approveModal').addEventListener('shown.bs.modal', () => { signaturePad = preparePad($('signatureCanvas'), signaturePad); });
-function openApprove(id) {
-approving = shipments.find(s => s.id === id);
-if (!approving) return;
-$('apvInfo').innerText = `${approving.supplier} • #${approving.irsaliye_no} • Düzenleyen: ${approving.prepared_by || '-'}`;
-$('apvItems').innerHTML = approving.items.map(i => `
-<div class="item-row" data-item="${i.id}" data-qty="${i.qty}" data-pid="${i.product_id}" data-nh="${i.no_hardener ? 1 : ''}" data-hq="${i.hardener_qty ?? ''}">
-<div class="d-flex justify-content-between gap-2">
-<span class="fw-semibold small">${esc(i.product_name)}</span>
-<span class="small text-nowrap">Bildirilen: <b>${num(i.qty)} L</b>${tnkSpanI(i, i.qty)}</span>
-</div>
-<div class="row g-2 mt-1 align-items-end">
-<div class="col-5">
-<div class="tiny text-secondary">Gelen (L)</div>
-<input type="number" inputmode="decimal" class="form-control form-control-sm apv-rec" value="${i.qty}" oninput="updateApproveRow(this)">
-</div>
-<div class="col-7 tiny text-secondary apv-after"></div>
-</div>
-<input class="form-control form-control-sm mt-2 apv-note d-none" placeholder="Fark açıklaması (eksik / hasarlı)">
-</div>`).join('');
-$('apvItems').querySelectorAll('.apv-rec').forEach(updateApproveRow);
-personPicker('apvPerson', me.name, '');
-$('apvNote').value = '';
-approveModal.show();
-}
-const apvItem = row => ({ product_id: Number(row.dataset.pid), no_hardener: !!row.dataset.nh,
-hardener_qty: row.dataset.hq === '' ? null : Number(row.dataset.hq) });
-function updateApproveRow(inp) {
-const row = inp.closest('.item-row');
-const qty = Number(row.dataset.qty), p = prodById(Number(row.dataset.pid));
-const rec = inp.value === '' ? NaN : parseFloat(inp.value);
-const diff = !isNaN(rec) && rec !== qty;
-row.querySelector('.apv-note').classList.toggle('d-none', !diff);
-inp.classList.toggle('border-warning', diff);
-if (!p) return;
-const after = r2(p.qty - (isNaN(rec) ? 0 : rec));
-row.querySelector('.apv-after').innerHTML =
-(!isNaN(rec) && tnkI(apvItem(row), rec) ? `<div class="text-primary">Gelen: ${tnkI(apvItem(row), rec)}</div>` : '') +
-`Kalan emanet stok: ${num(p.qty)} → <b class="${after < 0 ? 'text-danger' : 'text-success'}">${num(after)} L</b>` +
-(diff ? `<div class="diff">${rec < qty ? `${num(qty - rec)} L eksik` : `${num(rec - qty)} L fazla`}</div>` : '');
-}
-async function confirmApproval() {
-const items = [];
-for (const row of $('apvItems').querySelectorAll('.item-row')) {
-const v = row.querySelector('.apv-rec').value;
-const rec = parseFloat(v);
-if (v === '' || !(rec >= 0)) return notify('Gelen miktarları kontrol edin (0 veya daha büyük olmalı).', 'warning');
-items.push({ item_id: Number(row.dataset.item), received_qty: rec, note: row.querySelector('.apv-note').value.trim(), qty: Number(row.dataset.qty) });
-}
-const noNote = items.filter(i => i.received_qty !== i.qty && !i.note);
-if (noNote.length && !confirm('Bildirilenden farklı gelen ürün(ler) için açıklama yazmadınız. Yine de devam edilsin mi?')) return;
-const person = readPerson('apvPerson');
-if (!person) return notify('Teslim alan kişiyi seçin veya yazın.', 'warning');
-if (!signaturePad || signaturePad.isEmpty()) return notify('Lütfen ekrana imzalayınız.', 'warning');
-const r = await rpc('portal_approve_shipment', {
-p_id: approving.id, p_signature: signaturePad.toDataURL('image/png'), p_received_by: person,
-p_note: $('apvNote').value.trim(), p_items: items.map(({ qty, ...x }) => x)
-});
-if (!r) return;
-approveModal.hide();
-notify('Teslim alındı, emanet stoktan düşüldü.');
-await loadData();
 }

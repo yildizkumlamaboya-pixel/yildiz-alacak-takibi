@@ -589,6 +589,26 @@ main.container { max-width: 1120px !important; padding-left: 1.5rem; padding-rig
 </div>
 </div>
 </div>
+<div class="modal fade" id="shareModal" tabindex="-1">
+<div class="modal-dialog modal-dialog-centered modal-dialog-scrollable">
+<div class="modal-content">
+<div class="modal-header border-0 pb-0">
+<h6 class="modal-title fw-semibold" id="shareTitle">Siparişi Paylaş</h6>
+<button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+</div>
+<div class="modal-body">
+<img id="shareImg" alt="Sipariş görseli" class="w-100 border rounded-3">
+</div>
+<div class="modal-footer border-0 pt-0 d-grid gap-2">
+<button class="btn btn-success" id="shareBtn" onclick="shareNow()"><i class="bi bi-whatsapp me-1"></i>WhatsApp / Paylaş</button>
+<div class="d-flex gap-2">
+<button class="btn btn-outline-dark flex-fill" onclick="shareDownload()"><i class="bi bi-download me-1"></i>Görseli İndir</button>
+<button class="btn btn-outline-success flex-fill" onclick="shareText()"><i class="bi bi-chat-text me-1"></i>Yazı Olarak Gönder</button>
+</div>
+</div>
+</div>
+</div>
+</div>
 <div class="modal fade" id="productModal" tabindex="-1">
 <div class="modal-dialog modal-dialog-centered">
 <div class="modal-content rounded-4">

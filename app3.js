@@ -1,3 +1,85 @@
+function afterDetail(fn) {
+$('detailModal').addEventListener('hidden.bs.modal', fn, { once: true });
+detailModal.hide();
+}
+async function unapproveShipment(id) {
+const s = shipments.find(x => x.id === id);
+if (!s) return;
+const reason = prompt(
+`#${s.irsaliye_no} numaralı sevkiyatın onayı geri alınacak.\n\n` +
+`• Teslim alınan miktarlar ${s.supplier} emanet stoğuna geri eklenecek\n` +
+`• İmza silinecek, kayıt "Onay Bekliyor" durumuna dönecek\n` +
+`• ${s.supplier} kaydı tekrar düzenleyebilecek\n\nAçıklama (isteğe bağlı):`, '');
+if (reason === null) return;
+const r = await rpc('portal_unapprove_shipment', { p_id: id, p_reason: reason });
+if (!r) return;
+detailModal.hide();
+notify('Onay geri alındı, emanet stok geri eklendi.');
+await loadData();
+}
+$('approveModal').addEventListener('shown.bs.modal', () => { signaturePad = preparePad($('signatureCanvas'), signaturePad); });
+function openApprove(id) {
+approving = shipments.find(s => s.id === id);
+if (!approving) return;
+$('apvInfo').innerText = `${approving.supplier} • #${approving.irsaliye_no} • Düzenleyen: ${approving.prepared_by || '-'}`;
+$('apvItems').innerHTML = approving.items.map(i => `
+<div class="item-row" data-item="${i.id}" data-qty="${i.qty}" data-pid="${i.product_id}" data-nh="${i.no_hardener ? 1 : ''}" data-hq="${i.hardener_qty ?? ''}">
+<div class="d-flex justify-content-between gap-2">
+<span class="fw-semibold small">${esc(i.product_name)}</span>
+<span class="small text-nowrap">Bildirilen: <b>${num(i.qty)} L</b>${tnkSpanI(i, i.qty)}</span>
+</div>
+<div class="row g-2 mt-1 align-items-end">
+<div class="col-5">
+<div class="tiny text-secondary">Gelen (L)</div>
+<input type="number" inputmode="decimal" class="form-control form-control-sm apv-rec" value="${i.qty}" oninput="updateApproveRow(this)">
+</div>
+<div class="col-7 tiny text-secondary apv-after"></div>
+</div>
+<input class="form-control form-control-sm mt-2 apv-note d-none" placeholder="Fark açıklaması (eksik / hasarlı)">
+</div>`).join('');
+$('apvItems').querySelectorAll('.apv-rec').forEach(updateApproveRow);
+personPicker('apvPerson', me.name, '');
+$('apvNote').value = '';
+approveModal.show();
+}
+const apvItem = row => ({ product_id: Number(row.dataset.pid), no_hardener: !!row.dataset.nh,
+hardener_qty: row.dataset.hq === '' ? null : Number(row.dataset.hq) });
+function updateApproveRow(inp) {
+const row = inp.closest('.item-row');
+const qty = Number(row.dataset.qty), p = prodById(Number(row.dataset.pid));
+const rec = inp.value === '' ? NaN : parseFloat(inp.value);
+const diff = !isNaN(rec) && rec !== qty;
+row.querySelector('.apv-note').classList.toggle('d-none', !diff);
+inp.classList.toggle('border-warning', diff);
+if (!p) return;
+const after = r2(p.qty - (isNaN(rec) ? 0 : rec));
+row.querySelector('.apv-after').innerHTML =
+(!isNaN(rec) && tnkI(apvItem(row), rec) ? `<div class="text-primary">Gelen: ${tnkI(apvItem(row), rec)}</div>` : '') +
+`Kalan emanet stok: ${num(p.qty)} → <b class="${after < 0 ? 'text-danger' : 'text-success'}">${num(after)} L</b>` +
+(diff ? `<div class="diff">${rec < qty ? `${num(qty - rec)} L eksik` : `${num(rec - qty)} L fazla`}</div>` : '');
+}
+async function confirmApproval() {
+const items = [];
+for (const row of $('apvItems').querySelectorAll('.item-row')) {
+const v = row.querySelector('.apv-rec').value;
+const rec = parseFloat(v);
+if (v === '' || !(rec >= 0)) return notify('Gelen miktarları kontrol edin (0 veya daha büyük olmalı).', 'warning');
+items.push({ item_id: Number(row.dataset.item), received_qty: rec, note: row.querySelector('.apv-note').value.trim(), qty: Number(row.dataset.qty) });
+}
+const noNote = items.filter(i => i.received_qty !== i.qty && !i.note);
+if (noNote.length && !confirm('Bildirilenden farklı gelen ürün(ler) için açıklama yazmadınız. Yine de devam edilsin mi?')) return;
+const person = readPerson('apvPerson');
+if (!person) return notify('Teslim alan kişiyi seçin veya yazın.', 'warning');
+if (!signaturePad || signaturePad.isEmpty()) return notify('Lütfen ekrana imzalayınız.', 'warning');
+const r = await rpc('portal_approve_shipment', {
+p_id: approving.id, p_signature: signaturePad.toDataURL('image/png'), p_received_by: person,
+p_note: $('apvNote').value.trim(), p_items: items.map(({ qty, ...x }) => x)
+});
+if (!r) return;
+approveModal.hide();
+notify('Teslim alındı, emanet stoktan düşüldü.');
+await loadData();
+}
 function renderStock() {
 const list = visibleProducts();
 if (!list.length) {
