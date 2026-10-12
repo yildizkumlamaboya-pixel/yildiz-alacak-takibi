@@ -1,3 +1,6 @@
 android-app
 .github
 android-twa
+sql
+*.sql
+README.md
