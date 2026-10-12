@@ -18,7 +18,7 @@ exception when undefined_object then null; end $$;
 
 insert into public.push_config (k, v) values
   ('vapid_pub', '@@VAPID_PUB@@'), ('vapid_priv', '@@VAPID_PRIV@@'), ('cleanup_key', '@@CLEANUP@@'),
-  ('url', 'https://yildiz-alacak-takibi.vercel.app/api/push')
+  ('url', 'https://yildiz-emanet-stoktakibi.vercel.app/api/push')
 on conflict (k) do update set v = excluded.v;
 
 create or replace function public._portal_num(p numeric)

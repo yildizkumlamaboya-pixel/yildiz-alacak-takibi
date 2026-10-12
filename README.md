@@ -1,6 +1,6 @@
 # Yıldız Kumlama Boya – Emanet Stok Takibi
 
-Canlı adres: **https://yildiz-alacak-takibi.vercel.app**
+Canlı adres: **https://yildiz-emanet-stoktakibi.vercel.app**
 
 Delta Boya, Minimar gibi firmalardan emanet stoğu (Litre) takip eden PWA.
 Veriler Supabase'te tutulur; bu depoya yapılan her değişiklik Vercel'de otomatik yayına çıkar.

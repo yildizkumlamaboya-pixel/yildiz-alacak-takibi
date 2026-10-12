@@ -4,6 +4,8 @@
     <string name="launcherName">Yıldız Emanet Stok</string>
     <string name="assetStatements">
         [{ \"relation\": [\"delegate_permission/common.handle_all_urls\"],
+           \"target\": {\"namespace\": \"web\", \"site\": \"https://yildiz-emanet-stoktakibi.vercel.app\"}},
+         { \"relation\": [\"delegate_permission/common.handle_all_urls\"],
            \"target\": {\"namespace\": \"web\", \"site\": \"https://yildiz-alacak-takibi.vercel.app\"}}]
     </string>
 </resources>
