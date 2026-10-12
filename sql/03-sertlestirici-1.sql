@@ -4,6 +4,15 @@
 alter table public.catalog add column if not exists pack_size numeric;
 alter table public.catalog add column if not exists hardener_size numeric;
 
+-- Eski surumlerin hepsini sil (hangi imzayla kalmis olursa olsun)
+do $$
+declare f record;
+begin
+  for f in select p.oid::regprocedure as sig from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+           where n.nspname = 'public' and p.proname in ('portal_catalog_add', 'portal_catalog_update')
+             and not ('p_hard' = any(coalesce(p.proargnames, '{}')))
+  loop execute format('drop function %s', f.sig); end loop;
+end $$;
 drop function if exists public.portal_catalog_add(text, text, text, text);
 drop function if exists public.portal_catalog_update(text, text, bigint, text, text);
 drop function if exists public.portal_catalog_add(text, text, text, text, numeric);

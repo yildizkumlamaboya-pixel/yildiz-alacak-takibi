@@ -1,3 +1,44 @@
+function renderStock() {
+const list = visibleProducts();
+if (!list.length) {
+$('stockList').innerHTML = `<div class="card p-4 text-center text-secondary small">${isAdmin()
+? 'Henüz emanet stok kalemi yok. Önce Ürünler ekranından ürün ekleyin, sonra aşağıdan firmaya atayın.'
+: 'Size tanımlı emanet stok kalemi yok.'}</div>`;
+return;
+}
+const groups = {};
+sortProducts(list).forEach(p => (groups[p.allowed_bayi] = groups[p.allowed_bayi] || []).push(p));
+$('stockList').innerHTML = Object.keys(groups).map(b => {
+const items = groups[b];
+const total = r2(items.reduce((a, p) => a + p.qty, 0));
+return `
+<div class="mb-3">
+${isAdmin() ? `<div class="d-flex align-items-center gap-2 mb-2 px-1">
+${firmLogo(b, 22)}<span class="fw-semibold small">${esc(b)}</span>
+<span class="badge text-bg-light border">Toplam kalan ${num(total)} L</span></div>` : ''}
+<div class="vstack gap-2">${items.map(p => {
+const st = balanceState(p);
+const wait = pendingQty(p.id);
+return `
+<div class="card p-3 d-flex flex-row justify-content-between align-items-center clickable ${st.cls}" onclick="openProductReport(${p.id})">
+<div class="me-2">
+<div class="fw-semibold small">${esc(p.name)}</div>
+<div class="tiny text-secondary">${esc(p.code)}${wait ? ` • <span class="text-warning-emphasis"><i class="bi bi-hourglass-split"></i> ${num(wait)} L onay bekliyor</span>` : ''}</div>
+</div>
+<div class="d-flex align-items-center gap-2 text-end">
+<div>
+<div class="tiny text-secondary">Kalan</div>
+<div class="fw-bold ${st.txt}">${num(p.qty)} L</div>
+${tnk(p.id, p.qty) ? `<div class="tiny text-secondary">≈ ${tnk(p.id, p.qty)}</div>` : ''}
+${st.badge}
+</div>
+${isAdmin() ? `<button class="btn btn-sm btn-light border" title="Düzenle" onclick="event.stopPropagation(); openProductEdit(${p.id})"><i class="bi bi-pencil"></i></button>` : ''}
+</div>
+</div>`;
+}).join('')}</div>
+</div>`;
+}).join('');
+}
 function productOptions(list, withBayi) {
 return sortProducts(list).map(p =>
 `<option value="${p.id}">${esc((withBayi ? p.allowed_bayi + ' • ' : '') + p.name)} (Kalan: ${num(p.qty)} L)</option>`).join('');

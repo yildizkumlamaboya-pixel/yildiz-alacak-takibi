@@ -308,8 +308,8 @@ shipFilter = 'all'; pages.ship = pages.order = pages.moves = 1;
 document.querySelectorAll('#shipFilterGroup .btn').forEach(b => b.classList.toggle('active', b.dataset.f === 'all'));
 toggleShipFilters(false);
 initRealtime();
-if (isAdmin()) await loadUsers();
-await loadData();
+try { await loadData(); } catch (e) { reportError('loadData', e); }
+if (isAdmin()) { try { await loadUsers(); } catch (e) { reportError('loadUsers', e); } }
 resetSevkForm();
 navStack = []; currentTab = 'tabOnay';
 switchTab('tabOnay', true);
@@ -471,6 +471,14 @@ if (!box) return;
 box.classList.toggle('d-none', !renderErrors.length);
 box.innerHTML = renderErrors.length ? `<i class="bi bi-exclamation-octagon me-1"></i><b>Bir sorun oluştu, bu metni Claude'a iletin:</b><div class="tiny mt-1" style="word-break:break-word">${renderErrors.map(esc).join('<br>')}</div>` : '';
 }
+function reportError(where, e) {
+const msg = `${where}: ${e && e.message || e}`;
+if (!renderErrors.includes(msg)) renderErrors.push(msg);
+console.error(where, e);
+showLoadError();
+}
+window.addEventListener('error', ev => { if (me) reportError('Hata', ev.error || ev.message); });
+window.addEventListener('unhandledrejection', ev => { if (me) reportError('Hata', ev.reason); });
 async function loadData() {
 const [res, m] = await Promise.all([sb.rpc('portal_data', { p_user: me.name, p_pass: myPass }).catch(e => ({ error: { message: String(e && e.message || e) } })),
 sb.rpc('portal_meta', { p_user: me.name, p_pass: myPass }).catch(() => ({ error: true }))]);
@@ -564,22 +572,4 @@ const total = Math.max(1, Math.ceil(list.length / PAGE_SIZE));
 pages[key] = Math.min(Math.max(1, pages[key]), total);
 const start = (pages[key] - 1) * PAGE_SIZE;
 return list.slice(start, start + PAGE_SIZE);
-}
-function pagerHtml(count, key) {
-const total = Math.ceil(count / PAGE_SIZE);
-if (total <= 1) return '';
-const cur = Math.min(Math.max(1, pages[key]), total);
-const nums = [...new Set([1, cur - 1, cur, cur + 1, total])].filter(n => n >= 1 && n <= total).sort((a, b) => a - b);
-let html = '', prev = 0;
-nums.forEach(n => {
-if (n - prev > 1) html += '<span class="text-secondary small">…</span>';
-html += `<button class="btn btn-sm ${n === cur ? 'btn-dark' : 'btn-light border'}" onclick="goPage('${key}', ${n})">${n}</button>`;
-prev = n;
-});
-const from = (cur - 1) * PAGE_SIZE + 1, to = Math.min(cur * PAGE_SIZE, count);
-return `<div class="pager">
-<button class="btn btn-sm btn-light border" ${cur <= 1 ? 'disabled' : ''} onclick="goPage('${key}', ${cur - 1})"><i class="bi bi-chevron-left"></i></button>
-${html}
-<button class="btn btn-sm btn-light border" ${cur >= total ? 'disabled' : ''} onclick="goPage('${key}', ${cur + 1})"><i class="bi bi-chevron-right"></i></button>
-</div><div class="tiny text-secondary text-center mt-1">${from}–${to} / ${count} kayıt</div>`;
 }
