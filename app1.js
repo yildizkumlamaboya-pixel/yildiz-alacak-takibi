@@ -480,8 +480,8 @@ showLoadError();
 window.addEventListener('error', ev => { if (me) reportError('Hata', ev.error || ev.message); });
 window.addEventListener('unhandledrejection', ev => { if (me) reportError('Hata', ev.reason); });
 async function loadData() {
-const [res, m] = await Promise.all([sb.rpc('portal_data', { p_user: me.name, p_pass: myPass }).catch(e => ({ error: { message: String(e && e.message || e) } })),
-sb.rpc('portal_meta', { p_user: me.name, p_pass: myPass }).catch(() => ({ error: true }))]);
+const [res, m] = await Promise.all([Promise.resolve(sb.rpc('portal_data', { p_user: me.name, p_pass: myPass })).catch(e => ({ error: { message: String(e && e.message || e) } })),
+Promise.resolve(sb.rpc('portal_meta', { p_user: me.name, p_pass: myPass })).catch(() => ({ error: true }))]);
 renderErrors.length = 0;
 if (res.error) {
 renderErrors.push('Veriler yüklenemedi (portal_data): ' + res.error.message);
