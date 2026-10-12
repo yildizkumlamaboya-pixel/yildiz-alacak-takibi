@@ -71,14 +71,13 @@ return `
 async function addCatalog() {
 const code = $('catCode').value.trim(), name = $('catName').value.trim();
 if (!code || !name) return notify('Ürün kodu ve adını giriniz.', 'warning');
-const pack = parseFloat($('catPack'].value);
+const pack = parseFloat($('catPack').value);
 if ($('catPack').value !== '' && !(pack > 0)) return notify('Teneke litresi geçersiz.', 'warning');
 const r = await rpc('portal_catalog_add', pack > 0 ? { p_code: code, p_name: name, p_pack: pack } : { p_code: code, p_name: name });
 if (!r) return;
 $('catCode').value = ''; $('catName').value = ''; $('catPack').value = '';
 notify('Ürün eklendi.');
 await loadData();
-renderCatalog();
 }
 
 function openCatEdit(id) {
