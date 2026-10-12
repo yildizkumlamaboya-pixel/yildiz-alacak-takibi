@@ -341,13 +341,28 @@ ctx.fillStyle = '#9ca3af'; ctx.font = F(400, 22);
 ctx.fillText(`Yıldız Kumlama Boya • Emanet Stok Takibi • ${dt(new Date())}`, P, H - 40);
 return new Promise(res => c.toBlob(b => res(b), 'image/png'));
 }
+function waNumber(ph) {
+let d = String(ph || '').replace(/\D/g, '');
+if (!d) return '';
+if (d.startsWith('00')) d = d.slice(2);
+if (d.length === 11 && d.startsWith('0')) d = '90' + d.slice(1);
+else if (d.length === 10 && d.startsWith('5')) d = '90' + d;
+return d.length >= 11 ? d : '';
+}
+const firmPhone = name => { const u = users.find(x => x.name === name); return u && waNumber(u.phone); };
+function shareToFirm() {
+if (!shareData || !shareData.phone) return;
+window.open(`https://wa.me/${shareData.phone}?text=${encodeURIComponent(shareData.text)}`, '_blank');
+}
 async function openOrderShare(id) {
 const o = orders.find(x => x.id === id);
 if (!o) return;
 const blob = await drawOrderImage(o);
 if (!blob) return notify('Görsel oluşturulamadı.', 'danger');
 const name = `${orderNo(o)}_${o.bayi}.png`.replace(/[^\wçğıöşüÇĞİÖŞÜ.-]+/g, '_');
-shareData = { blob, name, text: orderShareText(o), file: new File([blob], name, { type: 'image/png' }) };
+shareData = { blob, name, text: orderShareText(o), file: new File([blob], name, { type: 'image/png' }), phone: isAdmin() ? firmPhone(o.bayi) : '' };
+$('shareFirmBtn').classList.toggle('d-none', !shareData.phone);
+$('shareFirmTxt').innerText = `WhatsApp'tan Gönder: ${o.bayi}`;
 const img = $('shareImg');
 if (img.dataset.url) URL.revokeObjectURL(img.dataset.url);
 img.dataset.url = URL.createObjectURL(blob); img.src = img.dataset.url;
@@ -468,6 +483,7 @@ const bayi = $('ordBayi').value;
 if (!bayi) return notify('Firma seçiniz.', 'warning');
 const items = readItems('ordItems');
 if (!items) return;
+const before = new Set(orders.map(o => o.id));
 const r = await shipRpc('portal_order_create', { p_bayi: bayi, p_note: $('ordNote').value.trim(), p_due_date: $('ordDue').value || null, p_items: items });
 if (!r) return;
 $('ordNote').value = ''; $('ordDue').value = '';
@@ -475,6 +491,8 @@ notify(`Sipariş ${bayi} firmasına gönderildi.`);
 await loadData();
 toggleOrderForm(false);
 setOrderFilter('open');
+const yeni = orders.find(o => !before.has(o.id) && o.bayi === bayi);
+if (yeni) openOrderShare(yeni.id);
 }
 function openOrderEdit(id) {
 editingOrder = orders.find(o => o.id === id);
@@ -545,31 +563,4 @@ $('editWarn').classList.toggle('d-none', !approved);
 personPicker('editPerson', editing.supplier, editing.prepared_by || '');
 itemEditor('editItems', products.filter(p => p.allowed_bayi === editing.supplier), editing.items, approved && isAdmin());
 editModal.show();
-}
-async function saveEdit() {
-const no = $('editNo').value.trim();
-if (!no) return notify('İrsaliye numarasını giriniz.', 'warning');
-const person = readPerson('editPerson');
-if (!person) return notify('İrsaliyeyi düzenleyen kişiyi seçin veya yazın.', 'warning');
-const items = readItems('editItems');
-if (!items) return;
-const r = await shipRpc('portal_update_shipment', { p_id: editing.id, p_irsaliye: no, p_prepared_by: person, p_items: items });
-if (!r) return;
-editModal.hide();
-notify('Sevkiyat güncellendi.');
-await loadData();
-}
-async function deleteShipment(id) {
-const s = shipments.find(x => x.id === id);
-if (!s) return;
-const msg = isPending(s)
-? `#${s.irsaliye_no} numaralı sevkiyat silinsin mi?`
-: `#${s.irsaliye_no} TESLİM ALINMIŞ bir kayıt.\nSilinirse teslim alınan miktarlar ${s.supplier} emanet stoğuna geri eklenecek:\n` +
-s.items.filter(i => i.received_qty > 0).map(i => `• ${i.product_name}: ${num(i.received_qty)} L`).join('\n') + '\n\nDevam edilsin mi?';
-if (!confirm(msg)) return;
-const r = await rpc('portal_delete_shipment', { p_id: id });
-if (!r) return;
-detailModal.hide();
-notify('Sevkiyat silindi.');
-await loadData();
 }

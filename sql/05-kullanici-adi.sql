@@ -1,5 +1,6 @@
 -- 05 KULLANICI ADI ILE GIRIS - Supabase SQL Editor'de bir kez calistirin. Tekrar calistirmak guvenlidir.
 alter table public.portal_users add column if not exists username text;
+alter table public.portal_users add column if not exists phone text;
 create unique index if not exists portal_users_username_uq on public.portal_users (lower(username));
 
 -- Yonetici: admin, firmalar: adindan turetilen kullanici adi (yonetici sonradan degistirebilir)
@@ -40,13 +41,13 @@ end $$;
 
 drop function if exists public.portal_admin_users(text, text);
 create or replace function public.portal_admin_users(p_user text, p_pass text)
-returns table(name text, role text, active boolean, has_password boolean, username text)
+returns table(name text, role text, active boolean, has_password boolean, username text, phone text)
 language plpgsql security definer set search_path = public, extensions
 as $$
 begin
   perform _portal_require(p_user, p_pass, true);
   return query
-    select u.name, u.role, u.active, (u.pass_hash is not null), u.username
+    select u.name, u.role, u.active, (u.pass_hash is not null), u.username, u.phone
     from portal_users u
     order by (u.role = 'admin') desc, u.name;
 end $$;

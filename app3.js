@@ -1,3 +1,30 @@
+async function saveEdit() {
+const no = $('editNo').value.trim();
+if (!no) return notify('İrsaliye numarasını giriniz.', 'warning');
+const person = readPerson('editPerson');
+if (!person) return notify('İrsaliyeyi düzenleyen kişiyi seçin veya yazın.', 'warning');
+const items = readItems('editItems');
+if (!items) return;
+const r = await shipRpc('portal_update_shipment', { p_id: editing.id, p_irsaliye: no, p_prepared_by: person, p_items: items });
+if (!r) return;
+editModal.hide();
+notify('Sevkiyat güncellendi.');
+await loadData();
+}
+async function deleteShipment(id) {
+const s = shipments.find(x => x.id === id);
+if (!s) return;
+const msg = isPending(s)
+? `#${s.irsaliye_no} numaralı sevkiyat silinsin mi?`
+: `#${s.irsaliye_no} TESLİM ALINMIŞ bir kayıt.\nSilinirse teslim alınan miktarlar ${s.supplier} emanet stoğuna geri eklenecek:\n` +
+s.items.filter(i => i.received_qty > 0).map(i => `• ${i.product_name}: ${num(i.received_qty)} L`).join('\n') + '\n\nDevam edilsin mi?';
+if (!confirm(msg)) return;
+const r = await rpc('portal_delete_shipment', { p_id: id });
+if (!r) return;
+detailModal.hide();
+notify('Sevkiyat silindi.');
+await loadData();
+}
 async function openDetail(id) {
 const s = shipments.find(x => x.id === id);
 if (!s) return;
@@ -555,67 +582,3 @@ const docHeader = (title, sub) => `
 </div>`;
 const docFooter = () => `<div class="doc-lbl mt-4" style="font-size:10px">Bu belge Yıldız Kumlama Boya emanet stok takip sisteminden ${dt(new Date())} tarihinde oluşturulmuştur.</div>`;
 const docNo = s => `TES-${new Date(s.approved_at || s.created_at).getFullYear()}-${String(s.id).padStart(5, '0')}`;
-async function fetchDocData(ids) {
-const out = {};
-for (let i = 0; i < ids.length; i += 40) {
-const r = await rpc('portal_doc_data', { p_ids: ids.slice(i, i + 40) });
-if (!r) return null;
-(r.data || []).forEach(d => { out[d.id] = d; });
-}
-return out;
-}
-function deliveryDocHtml(s, dd, footer = true) {
-dd = dd || {};
-const after = {};
-Object.entries(dd.after || {}).forEach(([k, v]) => { after[Number(k)] = Number(v); });
-const no = docNo(s);
-const anyNote = s.items.some(i => i.note || i.received_qty !== i.qty);
-return `
-${docHeader('TESLİMAT BELGESİ', `<div>Belge No: <b>${no}</b></div>`)}
-<table class="doc-meta mb-3">
-<tr>
-<td><div class="doc-lbl">Teslim Eden</div><div class="fw-bold d-flex align-items-center gap-2">${firmLogo(s.supplier, 26)}${esc(s.supplier)}</div>
-<div>İrsaliyeyi düzenleyen: ${esc(s.prepared_by || '-')}</div></td>
-<td><div class="doc-lbl">Teslim Alan</div><div class="fw-bold">Yıldız Kumlama Boya</div>
-<div>Teslim alan: ${esc(s.received_by || s.approved_by || '-')}</div></td>
-</tr>
-<tr>
-<td><div class="doc-lbl">İrsaliye / Sevkiyat No</div><div class="fw-bold">${esc(s.irsaliye_no)}</div>
-${s.order_id ? `<div>Sipariş No: ${orderNoById(s.order_id)}</div>` : ''}</td>
-<td><div class="doc-lbl">Teslim Tarihi</div><div class="fw-bold">${dt(s.approved_at)}</div></td>
-</tr>
-<tr>
-<td><div class="doc-lbl">Bildirim Tarihi</div><div>${dt(s.created_at)}</div></td>
-<td>${s.approve_note ? `<div class="doc-lbl">Not</div><div>${esc(s.approve_note)}</div>` : ''}</td>
-</tr>
-</table>
-<table class="doc-items mb-3">
-<thead><tr>
-<th style="width:28px">#</th><th style="width:16%">Kod</th><th>Ürün</th>
-<th class="text-end text-nowrap" style="width:1%">Bildirilen</th><th class="text-end text-nowrap" style="width:1%">Teslim Alınan</th>
-${anyNote ? '<th style="width:22%">Açıklama</th>' : ''}
-</tr></thead>
-<tbody>${s.items.map((i, k) => `
-<tr>
-<td>${k + 1}</td><td>${esc(i.code || '')}</td><td>${esc(i.product_name)}</td>
-<td class="text-end text-nowrap">${num(i.qty)} L${tnkLineI(i, i.qty)}</td>
-<td class="text-end text-nowrap fw-bold">${num(i.received_qty)} L${tnkLineI(i, i.received_qty)}</td>
-${anyNote ? `<td>${esc(i.note || (i.received_qty !== i.qty ? (i.received_qty < i.qty ? `${num(i.qty - i.received_qty)} L eksik` : `${num(i.received_qty - i.qty)} L fazla`) : ''))}</td>` : ''}
-</tr>`).join('')}
-</tbody>
-${s.items.length > 1 ? `<tfoot><tr><td colspan="3" class="text-end">Toplam</td>
-<td class="text-end text-nowrap">${num(shipQty(s))} L</td><td class="text-end text-nowrap">${num(shipRecv(s))} L</td>${anyNote ? '<td></td>' : ''}</tr></tfoot>` : ''}
-</table>
-${after && Object.keys(after).length ? `
-<div class="border rounded p-2 mb-2" style="background:#f9fafb">
-<div class="doc-lbl mb-1">Bu teslimat sonrası ${esc(s.supplier)} kalan emanet stok:</div>
-${s.items.filter(i => i.product_id in after).map(i => `<div>${esc(i.product_name)}: <b>${num(after[i.product_id])} L</b>${tnk(i.product_id, after[i.product_id]) ? ' (≈ ' + tnk(i.product_id, after[i.product_id]) + ')' : ''}${after[i.product_id] < 0 ? ' <span class="text-danger">(fazla teslim)</span>' : ''}</div>`).join('')}
-</div>` : ''}
-<div class="doc-sign">
-<div><div class="doc-lbl">Teslim Eden: ${esc(s.supplier)}<br>${esc(s.prepared_by || '')} — İmza</div>
-${dd.supplier_sig ? `<img src="${dd.supplier_sig}" alt="Teslim eden imzası">` : ''}</div>
-<div><div class="doc-lbl">Teslim Alan: Yıldız Kumlama Boya<br>${esc(s.received_by || '')} — Dijital İmza</div>
-${dd.receiver_sig ? `<img src="${dd.receiver_sig}" alt="Teslim alan imzası">` : '<div class="doc-lbl text-center mt-4">(dijital imza yok)</div>'}</div>
-</div>
-${footer ? docFooter() : ''}`;
-}

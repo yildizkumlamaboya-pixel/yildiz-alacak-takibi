@@ -609,7 +609,8 @@ main.container { max-width: 1120px !important; padding-left: 1.5rem; padding-rig
 <img id="shareImg" alt="Sipariş görseli" class="w-100 border rounded-3">
 </div>
 <div class="modal-footer border-0 pt-0 d-grid gap-2">
-<button class="btn btn-success" id="shareBtn" onclick="shareNow()"><i class="bi bi-whatsapp me-1"></i>WhatsApp / Paylaş</button>
+<button class="btn btn-success d-none" id="shareFirmBtn" onclick="shareToFirm()"><i class="bi bi-whatsapp me-1"></i><span id="shareFirmTxt">Firmaya WhatsApp'tan Gönder</span></button>
+<button class="btn btn-success" id="shareBtn" onclick="shareNow()"><i class="bi bi-share me-1"></i>Görseli Paylaş (WhatsApp vb.)</button>
 <div class="d-flex gap-2">
 <button class="btn btn-outline-dark flex-fill" onclick="shareDownload()"><i class="bi bi-download me-1"></i>Görseli İndir</button>
 <button class="btn btn-outline-success flex-fill" onclick="shareText()"><i class="bi bi-chat-text me-1"></i>Yazı Olarak Gönder</button>
@@ -682,6 +683,9 @@ main.container { max-width: 1120px !important; padding-left: 1.5rem; padding-rig
 <label class="small-label">Kullanıcı Adı</label>
 <input type="text" id="bayiUser" class="form-control" placeholder="örn. delta" autocomplete="off" autocapitalize="none" spellcheck="false">
 <div class="form-text mb-3">Firma bu adla giriş yapar. Türkçe karakter ve boşluk olmadan (harf, rakam, . - _).</div>
+<label class="small-label">WhatsApp Telefonu <span class="text-secondary">(isteğe bağlı)</span></label>
+<input type="tel" id="bayiPhone" class="form-control" placeholder="0532 123 45 67" autocomplete="off" inputmode="tel">
+<div class="form-text mb-3">Sipariş özetinden bu numaraya tek dokunuşla WhatsApp mesajı gönderilir.</div>
 <label class="small-label">Giriş Şifresi</label>
 <input type="text" id="bayiPass" class="form-control" placeholder="En az 4 karakter" autocomplete="off">
 <label class="small-label mt-3">Firma Logosu <span class="text-secondary">(isteğe bağlı)</span></label>

@@ -1,3 +1,67 @@
+async function fetchDocData(ids) {
+const out = {};
+for (let i = 0; i < ids.length; i += 40) {
+const r = await rpc('portal_doc_data', { p_ids: ids.slice(i, i + 40) });
+if (!r) return null;
+(r.data || []).forEach(d => { out[d.id] = d; });
+}
+return out;
+}
+function deliveryDocHtml(s, dd, footer = true) {
+dd = dd || {};
+const after = {};
+Object.entries(dd.after || {}).forEach(([k, v]) => { after[Number(k)] = Number(v); });
+const no = docNo(s);
+const anyNote = s.items.some(i => i.note || i.received_qty !== i.qty);
+return `
+${docHeader('TESLİMAT BELGESİ', `<div>Belge No: <b>${no}</b></div>`)}
+<table class="doc-meta mb-3">
+<tr>
+<td><div class="doc-lbl">Teslim Eden</div><div class="fw-bold d-flex align-items-center gap-2">${firmLogo(s.supplier, 26)}${esc(s.supplier)}</div>
+<div>İrsaliyeyi düzenleyen: ${esc(s.prepared_by || '-')}</div></td>
+<td><div class="doc-lbl">Teslim Alan</div><div class="fw-bold">Yıldız Kumlama Boya</div>
+<div>Teslim alan: ${esc(s.received_by || s.approved_by || '-')}</div></td>
+</tr>
+<tr>
+<td><div class="doc-lbl">İrsaliye / Sevkiyat No</div><div class="fw-bold">${esc(s.irsaliye_no)}</div>
+${s.order_id ? `<div>Sipariş No: ${orderNoById(s.order_id)}</div>` : ''}</td>
+<td><div class="doc-lbl">Teslim Tarihi</div><div class="fw-bold">${dt(s.approved_at)}</div></td>
+</tr>
+<tr>
+<td><div class="doc-lbl">Bildirim Tarihi</div><div>${dt(s.created_at)}</div></td>
+<td>${s.approve_note ? `<div class="doc-lbl">Not</div><div>${esc(s.approve_note)}</div>` : ''}</td>
+</tr>
+</table>
+<table class="doc-items mb-3">
+<thead><tr>
+<th style="width:28px">#</th><th style="width:16%">Kod</th><th>Ürün</th>
+<th class="text-end text-nowrap" style="width:1%">Bildirilen</th><th class="text-end text-nowrap" style="width:1%">Teslim Alınan</th>
+${anyNote ? '<th style="width:22%">Açıklama</th>' : ''}
+</tr></thead>
+<tbody>${s.items.map((i, k) => `
+<tr>
+<td>${k + 1}</td><td>${esc(i.code || '')}</td><td>${esc(i.product_name)}</td>
+<td class="text-end text-nowrap">${num(i.qty)} L${tnkLineI(i, i.qty)}</td>
+<td class="text-end text-nowrap fw-bold">${num(i.received_qty)} L${tnkLineI(i, i.received_qty)}</td>
+${anyNote ? `<td>${esc(i.note || (i.received_qty !== i.qty ? (i.received_qty < i.qty ? `${num(i.qty - i.received_qty)} L eksik` : `${num(i.received_qty - i.qty)} L fazla`) : ''))}</td>` : ''}
+</tr>`).join('')}
+</tbody>
+${s.items.length > 1 ? `<tfoot><tr><td colspan="3" class="text-end">Toplam</td>
+<td class="text-end text-nowrap">${num(shipQty(s))} L</td><td class="text-end text-nowrap">${num(shipRecv(s))} L</td>${anyNote ? '<td></td>' : ''}</tr></tfoot>` : ''}
+</table>
+${after && Object.keys(after).length ? `
+<div class="border rounded p-2 mb-2" style="background:#f9fafb">
+<div class="doc-lbl mb-1">Bu teslimat sonrası ${esc(s.supplier)} kalan emanet stok:</div>
+${s.items.filter(i => i.product_id in after).map(i => `<div>${esc(i.product_name)}: <b>${num(after[i.product_id])} L</b>${tnk(i.product_id, after[i.product_id]) ? ' (≈ ' + tnk(i.product_id, after[i.product_id]) + ')' : ''}${after[i.product_id] < 0 ? ' <span class="text-danger">(fazla teslim)</span>' : ''}</div>`).join('')}
+</div>` : ''}
+<div class="doc-sign">
+<div><div class="doc-lbl">Teslim Eden: ${esc(s.supplier)}<br>${esc(s.prepared_by || '')} — İmza</div>
+${dd.supplier_sig ? `<img src="${dd.supplier_sig}" alt="Teslim eden imzası">` : ''}</div>
+<div><div class="doc-lbl">Teslim Alan: Yıldız Kumlama Boya<br>${esc(s.received_by || '')} — Dijital İmza</div>
+${dd.receiver_sig ? `<img src="${dd.receiver_sig}" alt="Teslim alan imzası">` : '<div class="doc-lbl text-center mt-4">(dijital imza yok)</div>'}</div>
+</div>
+${footer ? docFooter() : ''}`;
+}
 async function openDoc(id) {
 const s = shipments.find(x => x.id === id);
 if (!s || isPending(s)) return;
@@ -142,6 +206,7 @@ $('bayiList').innerHTML = !rows.length
 <div class="fw-semibold small d-flex align-items-center gap-2 ${u.active ? '' : 'text-secondary'}">${firmLogo(u.name, 20)}${esc(u.name)}</div>
 <div class="d-flex flex-wrap gap-1 mt-1">
 ${u.username ? `<span class="badge text-bg-light border" style="font-size:.6rem"><i class="bi bi-person"></i> ${esc(u.username)}</span>` : ''}
+${u.phone ? `<span class="badge text-bg-light border text-success" style="font-size:.6rem"><i class="bi bi-whatsapp"></i> ${esc(u.phone)}</span>` : ''}
 ${u.has_password ? `<span class="badge text-bg-success bg-opacity-75" style="font-size:.6rem">Şifre tanımlı</span>`
 : `<span class="badge text-bg-warning" style="font-size:.6rem">Şifre yok - giriş yapamaz</span>`}
 ${u.active ? '' : `<span class="badge text-bg-secondary" style="font-size:.6rem">Pasif</span>`}
@@ -175,6 +240,7 @@ $('bayiName').classList.toggle('bg-light', !bayiEditingNew);
 $('bayiNameHint').classList.toggle('d-none', !bayiEditingNew);
 $('bayiPass').value = '';
 $('bayiUser').value = u ? (u.username || '') : '';
+$('bayiPhone').value = u ? (u.phone || '') : '';
 bayiModal.show();
 }
 let bayiLogoNew;
@@ -215,6 +281,9 @@ async function saveBayi() {
 const name = $('bayiName').value.trim(), pass = $('bayiPass').value, uname = $('bayiUser').value.trim();
 const cur = bayiEditingNew ? null : users.find(u => u.name === name);
 const unameChanged = uname !== ((cur && cur.username) || '');
+const phone = $('bayiPhone').value.trim();
+const phoneChanged = phone.replace(/\D/g, '') !== String((cur && cur.phone) || '').replace(/\D/g, '');
+if (phone && !waNumber(phone)) return notify('Telefon numarası geçersiz (ör. 0532 123 45 67).', 'warning');
 if (!name) return notify('Firma adı giriniz.', 'warning');
 if (!uname) return notify('Kullanıcı adı giriniz.', 'warning');
 if (!/^[A-Za-z0-9._-]{3,30}$/.test(uname)) return notify('Kullanıcı adı 3-30 karakter olmalı; Türkçe karakter ve boşluk kullanmayın.', 'warning');
@@ -223,7 +292,7 @@ return notify('Bu kullanıcı adı başka bir hesapta kullanılıyor.', 'warning
 if ((bayiEditingNew || pass) && pass.length < 4) return notify('Şifre en az 4 karakter olmalı.', 'warning');
 if (bayiEditingNew && users.some(u => u.name.toLocaleLowerCase('tr') === name.toLocaleLowerCase('tr')))
 return notify('Bu isimde bir hesap zaten var.', 'warning');
-if (!bayiEditingNew && !pass && !unameChanged && bayiLogoNew === undefined) return notify('Değişiklik yapılmadı.', 'secondary');
+if (!bayiEditingNew && !pass && !unameChanged && !phoneChanged && bayiLogoNew === undefined) return notify('Değişiklik yapılmadı.', 'secondary');
 if (bayiEditingNew || pass) {
 const r = await rpc('portal_admin_save_bayi', { p_name: name, p_new_pass: pass });
 if (!r) return;
@@ -235,6 +304,11 @@ if (bayiEditingNew) { bayiEditingNew = false; await loadUsers(); }
 return notify(/portal_admin_set_username|function|schema cache/i.test(error.message)
 ? "Kullanıcı adı için Supabase'de kullanici-adi.sql kurulumunun çalıştırılması gerekiyor." : error.message, 'danger');
 }
+}
+if (phoneChanged) {
+const { error } = await sb.rpc('portal_admin_set_phone', { p_user: me.name, p_pass: myPass, p_name: name, p_phone: phone || null });
+if (error) return notify(/portal_admin_set_phone|function|schema cache/i.test(error.message)
+? "Telefon için Supabase'de 12-firma-telefon.sql çalıştırılmalı." : error.message, 'danger');
 }
 if (bayiLogoNew !== undefined) {
 const { error } = await sb.rpc('portal_admin_set_logo', { p_user: me.name, p_pass: myPass, p_name: name, p_logo: bayiLogoNew });
