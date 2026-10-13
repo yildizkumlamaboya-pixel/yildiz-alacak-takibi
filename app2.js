@@ -1,3 +1,211 @@
+function logout() {
+if (me) pushDetach(me.name, myPass);
+$('pushAsk').classList.add('d-none');
+$('ordFormCard').classList.add('d-none'); $('ordOpenBtn').classList.remove('d-none');
+sessionSet(null);
+me = null; myPass = null;
+navStack = []; currentTab = 'tabAna'; clearTimeout(exitTimer);
+['adj', 'kalem', 'urun'].forEach(k => fold(k, false));
+catalog = []; products = []; shipments = []; personnel = []; users = []; backups = []; reportMoves = []; orders = [];
+convertingOrder = null; pendingSevk = null;
+closeDoc();
+[approveModal, editModal, detailModal, productModal, catModal, bayiModal].forEach(m => m.hide());
+if (channel) { sb.removeChannel(channel); channel = null; }
+$('loginSection').classList.remove('d-none');
+$('bootLoading').classList.add('d-none');
+$('appSection').classList.add('d-none');
+setTimeout(fillLastUser, 0);
+$('bottomNav').classList.add('d-none');
+$('logoutBtn').classList.add('d-none');
+$('settingsBtn').classList.add('d-none');
+$('liveDot').classList.add('d-none');
+$('userFirm').innerText = '';
+$('userRoleTitle').innerText = 'Emanet Stok Takibi';
+}
+const VAPID_PUBLIC = 'BOGosaNnUI8PNLOw5X7T1XxXJBt70flv9tJdTGq76RkNOr9AzNOy9oDyXOdw5Xhxz8dE8ty55x_mH-JHUNBtmMI';
+const PUSH_ASK_KEY = 'yks_bildirim_sorma', PUSH_OFF_KEY = 'yks_bildirim_kapali';
+let pushOn = false;
+const pushSupported = () => !DEMO && 'serviceWorker' in navigator && 'PushManager' in window && 'Notification' in window && window.isSecureContext;
+const pushWhatText = () => isAdmin()
+? 'Firmalar yeni sevkiyat bildirdiğinde telefonunuza bildirim gelir (uygulama kapalıyken de).'
+: 'Yeni sipariş geldiğinde ve sevkiyatınız teslim alındığında telefonunuza bildirim gelir (uygulama kapalıyken de).';
+function b64ToBytes(s) {
+const b = atob((s + '='.repeat((4 - s.length % 4) % 4)).replace(/-/g, '+').replace(/_/g, '/'));
+return Uint8Array.from(b, c => c.charCodeAt(0));
+}
+async function pushSubscription(create) {
+const reg = await navigator.serviceWorker.ready;
+let sub = await reg.pushManager.getSubscription();
+if (sub && create) {
+const k = sub.options && sub.options.applicationServerKey;
+if (k && btoa(String.fromCharCode(...new Uint8Array(k))).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '') !== VAPID_PUBLIC) {
+await sub.unsubscribe(); sub = null;
+}
+}
+if (!sub && create) sub = await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: b64ToBytes(VAPID_PUBLIC) });
+return sub;
+}
+async function pushEnable(ask) {
+if (!me || !pushSupported()) return updatePushUi();
+if (!ask && lsGet(PUSH_OFF_KEY) === '1') return updatePushUi();
+try {
+if (Notification.permission !== 'granted') {
+if (!ask) return updatePushUi();
+const perm = await Notification.requestPermission();
+if (perm !== 'granted') { lsSet(PUSH_ASK_KEY, '1'); notify('Bildirim izni verilmedi.', 'warning'); return updatePushUi(); }
+}
+const sub = await pushSubscription(true), j = sub.toJSON();
+const { error } = await sb.rpc('portal_push_subscribe', { p_user: me.name, p_pass: myPass, p_endpoint: j.endpoint, p_p256dh: j.keys.p256dh, p_auth: j.keys.auth });
+if (error) {
+pushOn = false;
+if (ask) notify(/portal_push_subscribe|function|schema cache/i.test(error.message)
+? "Bildirimler için Supabase'de bildirim.sql kurulumunun çalıştırılması gerekiyor." : error.message, 'danger');
+return updatePushUi();
+}
+pushOn = true;
+lsSet(PUSH_OFF_KEY, '0');
+if (ask) notify('Bildirimler açıldı.');
+} catch (e) {
+pushOn = false;
+if (ask) notify('Bildirim açılamadı: ' + (e && e.message || e), 'danger');
+}
+updatePushUi();
+}
+async function pushDisable() {
+try {
+const sub = await pushSubscription(false);
+if (sub) {
+await sb.rpc('portal_push_unsubscribe', { p_user: me.name, p_pass: myPass, p_endpoint: sub.endpoint });
+await sub.unsubscribe();
+}
+} catch (e) { /* yoksay */ }
+pushOn = false; lsSet(PUSH_ASK_KEY, '1'); lsSet(PUSH_OFF_KEY, '1');
+notify('Bu cihazda bildirimler kapatıldı.', 'secondary');
+updatePushUi();
+}
+async function pushTest() {
+const r = await rpc('portal_push_test');
+if (!r) return;
+notify(r.data ? 'Test bildirimi gönderildi, birkaç saniye içinde gelir.' : 'Bu hesapta bildirime açık cihaz yok.', r.data ? 'success' : 'warning');
+}
+function pushAskLater() { lsSet(PUSH_ASK_KEY, '1'); $('pushAsk').classList.add('d-none'); }
+function pushDetach(name, pass) {
+if (!pushSupported() || !name) return;
+navigator.serviceWorker.ready.then(r => r.pushManager.getSubscription()).then(sub => {
+if (sub) sb.rpc('portal_push_unsubscribe', { p_user: name, p_pass: pass, p_endpoint: sub.endpoint });
+}).catch(() => {});
+}
+function updatePushUi() {
+if (!me) return;
+const sup = pushSupported(), perm = sup ? Notification.permission : 'unsupported';
+$('pushWhat').innerText = pushWhatText();
+$('pushAskText').innerText = pushWhatText();
+$('pushAsk').classList.toggle('d-none', !(sup && perm === 'default' && lsGet(PUSH_ASK_KEY) !== '1'));
+$('pushState').innerHTML = !sup
+? (DEMO ? '<span class="text-secondary">Yerel modda bildirim yok.</span>'
+: '<span class="text-warning-emphasis"><i class="bi bi-exclamation-triangle me-1"></i>Bu tarayıcı bildirimi desteklemiyor. Android\'de Chrome ile açın; iPhone\'da önce Paylaş → Ana Ekrana Ekle yapın ve oradan açın.</span>')
+: perm === 'denied'
+? '<span class="text-danger"><i class="bi bi-x-circle me-1"></i>Bildirim izni kapalı. Telefon Ayarlar → Uygulamalar (veya tarayıcı site ayarları) → Bildirimler kısmından izin verin.</span>'
+: pushOn ? '<span class="text-success"><i class="bi bi-check-circle me-1"></i>Bu cihazda bildirimler açık.</span>'
+: '<span class="text-secondary">Bu cihazda bildirimler kapalı.</span>';
+$('pushOnBtn').classList.toggle('d-none', !sup || perm === 'denied' || pushOn);
+$('pushTestBtn').classList.toggle('d-none', !pushOn);
+$('pushOffBtn').classList.toggle('d-none', !pushOn);
+}
+function armBackGuard() {
+try { history.pushState({ yks: Date.now() }, ''); } catch (e) { /* yoksay */ }
+}
+function handleBack() {
+const open = document.querySelector('.modal.show');
+if (open) { const m = bootstrap.Modal.getInstance(open); if (m) m.hide(); return true; }
+if (!$('docView').classList.contains('d-none')) { closeDoc(); return true; }
+let prev = navStack.pop();
+while (prev && prev === currentTab) prev = navStack.pop();
+if (!prev && currentTab !== 'tabAna') prev = 'tabAna';
+if (!prev) return false;
+if (!TABS.includes(prev) || (prev === 'tabSevkEt' && isAdmin()) || (prev === 'tabUrun' && !isAdmin())) prev = 'tabAna';
+switchTab(prev, true);
+return true;
+}
+window.addEventListener('popstate', () => {
+if (!me) return;
+clearTimeout(exitTimer);
+if (handleBack()) { armBackGuard(); return; }
+notify('Çıkmak için tekrar geri tuşuna basın.', 'secondary');
+exitTimer = setTimeout(armBackGuard, 2000);
+});
+function initRealtime() {
+if (channel) sb.removeChannel(channel);
+channel = sb.channel('portal-pulse')
+.on('postgres_changes', { event: '*', schema: 'public', table: 'portal_pulse' }, scheduleReload)
+.subscribe(status => $('liveDot').classList.toggle('on', status === 'SUBSCRIBED'));
+}
+function scheduleReload() {
+clearTimeout(reloadTimer);
+reloadTimer = setTimeout(async () => {
+if (!me) return;
+await loadData();
+if (!$('tabRapor').classList.contains('d-none')) loadReport();
+}, 500);
+}
+const renderErrors = [];
+function showLoadError() {
+const box = $('loadErr');
+if (!box) return;
+box.classList.toggle('d-none', !renderErrors.length);
+box.innerHTML = renderErrors.length ? `<i class="bi bi-exclamation-octagon me-1"></i><b>Bir sorun oluştu, bu metni Claude'a iletin:</b><div class="tiny mt-1" style="word-break:break-word">${renderErrors.map(esc).join('<br>')}</div>` : '';
+}
+function reportError(where, e) {
+const msg = `${where}: ${e && e.message || e}`;
+if (!renderErrors.includes(msg)) renderErrors.push(msg);
+console.error(where, e);
+showLoadError();
+}
+window.addEventListener('error', ev => { if (me) reportError('Hata', ev.error || ev.message); });
+window.addEventListener('unhandledrejection', ev => { if (me) reportError('Hata', ev.reason); });
+async function loadData() {
+const [res, m] = await Promise.all([Promise.resolve(sb.rpc('portal_data', { p_user: me.name, p_pass: myPass })).catch(e => ({ error: { message: String(e && e.message || e) } })),
+Promise.resolve(sb.rpc('portal_meta', { p_user: me.name, p_pass: myPass })).catch(() => ({ error: true }))]);
+renderErrors.length = 0;
+if (res.error) {
+renderErrors.push('Veriler yüklenemedi (portal_data): ' + res.error.message);
+showLoadError();
+if (/Oturum geçersiz/.test(res.error.message)) logout();
+return;
+}
+if (m && m.error && m.error.message) renderErrors.push('portal_meta: ' + m.error.message);
+const dd = res.data || {}, anyItem = [...(dd.orders || []), ...(dd.shipments || [])].map(x => (x.items || [])[0]).find(Boolean);
+if (isAdmin() && anyItem && !('hardener_qty' in anyItem))
+renderErrors.push("Sertleştirici litresi kaydedilemiyor: Supabase'de 11-sertlestirici-litre.sql dosyasını çalıştırın.");
+const r = res;
+META = m && !m.error && m.data ? { packs: m.data.packs || {}, hards: m.data.hards || {}, logos: m.data.logos || {} } : { packs: {}, hards: {}, logos: {} };
+const d = r.data || {};
+catalog = d.catalog || [];
+products = (d.products || []).map(p => ({ ...p, qty: Number(p.qty), critical: Number(p.critical) }));
+shipments = (d.shipments || []).map(s => ({ ...s, items: (s.items || []).map(i => ({
+...i, qty: Number(i.qty), received_qty: i.received_qty == null ? null : Number(i.received_qty) })) }));
+personnel = d.personnel || [];
+orders = (d.orders || []).map(o => ({ ...o, items: (o.items || []).map(i => ({ ...i, qty: Number(i.qty) })) }));
+render();
+}
+function switchTab(tabId, fromBack = false) {
+if (!fromBack && tabId !== currentTab) {
+navStack.push(currentTab);
+if (navStack.length > 20) navStack.shift();
+}
+currentTab = tabId;
+const navId = TAB_PARENT[tabId] || tabId;
+TABS.forEach(id => {
+$(id).classList.toggle('d-none', id !== tabId);
+const b = $('btn-' + id);
+if (b) b.classList.toggle('active', id === navId);
+});
+$('settingsBtn').classList.toggle('active', tabId === 'tabAyarlar');
+if (tabId === 'tabRapor') loadReport();
+if (tabId === 'tabSevkEt' && !isAdmin()) sevkPad = preparePad($('sevkSigCanvas'), sevkPad);
+if (tabId === 'tabAyarlar' && isAdmin()) { loadUsers(); loadBackups(); loadAudit(); }
+window.scrollTo(0, 0);
+}
 function render() {
 if (!me) return;
 [renderHome, renderShipments, renderStock, renderCatalog, renderPersonnel, renderOrders, fillSelects].forEach(fn => {
@@ -347,187 +555,3 @@ if (ctx.measureText(t).width > maxW && line) { out.push(line); line = w; } else 
 if (line) out.push(line);
 return out.length ? out : [''];
 }
-function orderShareText(o) {
-const st = orderState(o);
-const lines = [`*SİPARİŞ ${orderNo(o)}*`, `Yıldız Kumlama Boya → ${o.bayi}`, `Tarih: ${dt(o.created_at)}`];
-if (o.due_date) lines.push(`Termin: ${dOnly(o.due_date + 'T00:00:00')}`);
-if (st !== 'open') lines.push(`Durum: ${({ cancelled: 'İptal', converted: 'Tamamlandı', partial: `Kısmi sevk (kalan ${num(orderProgress(o).rem)} L)` })[st]}`);
-lines.push('');
-o.items.forEach(i => { const t = tnkI(i, i.qty); lines.push(`• ${i.product_name}: *${qL(i, i.qty)}*${t ? ` — ${t}` : ''}`); });
-const total = r2(o.items.reduce((a, i) => a + i.qty, 0));
-if (o.items.length > 1) lines.push(`Toplam: ${totL(o.items)}`);
-if (o.note) lines.push('', `Not: ${o.note}`);
-return lines.join('\n');
-}
-async function drawOrderImage(o, opt) {
-const W = 1080, P = 64, c = document.createElement('canvas'), ctx = c.getContext('2d');
-const F = (w, s) => `${w} ${s}px Inter, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif`;
-const st0 = opt ? null : orderState(o);
-opt = opt || {
-title: 'SİPARİŞ', no: orderNo(o), d1: ['SİPARİŞ TARİHİ', dt(o.created_at)],
-d2: o.due_date ? ['TERMİN', dOnly(o.due_date + 'T00:00:00')] : null,
-status: st0 === 'open' ? null : { cancelled: ['İPTAL', '#dc3545'], converted: ['TAMAMLANDI', '#198754'], partial: ['KISMİ SEVK', '#b45309'] }[st0]
-};
-const total = r2(o.items.reduce((a, i) => a + i.qty, 0));
-ctx.font = F(600, 34);
-const rows = o.items.map(i => {
-ctx.font = F(600, 34); const name = wrapLines(ctx, i.product_name, W - 2 * P - 300);
-ctx.font = F(400, 26);
-const hqv = Number(i.hardener_qty) > 0 && hardOf(i.product_id) > 0 ? Math.min(Number(i.hardener_qty), i.qty) : 0;
-const t = [hqv ? `+ ${num(hqv)} L sertleştirici` : '', tnkI(i, i.qty)].filter(Boolean).join(' • '), sub = t ? wrapLines(ctx, t, W - 2 * P - 40) : [];
-return { i, name, sub, h: 34 + name.length * 44 + sub.length * 34 + 22 };
-});
-ctx.font = F(600, 30);
-const noteL = o.note ? wrapLines(ctx, 'Not: ' + o.note, W - 2 * P - 48) : [];
-const H = 230 + 250 + 70 + rows.reduce((a, r) => a + r.h, 0) + (o.items.length > 1 ? 130 : 0) + (noteL.length ? 70 + noteL.length * 40 : 0) + 120;
-c.width = W; c.height = H;
-ctx.fillStyle = '#ffffff'; ctx.fillRect(0, 0, W, H);
-ctx.fillStyle = '#111111'; ctx.fillRect(0, 0, W, 200);
-ctx.fillStyle = '#FFD41F'; ctx.fillRect(0, 200, W, 10);
-const myL = (META.logos && META.logos['Yıldız Kumlama Boya']) || LOGOS['Yıldız Kumlama Boya'];
-const logo = await loadImg(myL && myL.src);
-ctx.fillStyle = '#ffffff';
-if (logo) {
-const lh = 120, lw = Math.min(460, lh * (logo.width / logo.height));
-ctx.fillRect(P - 16, 40, lw + 32, lh + 0);
-ctx.drawImage(logo, P, 40, lw, lh);
-} else { ctx.font = F(800, 52); ctx.fillText('YILDIZ KUMLAMA BOYA', P, 120); }
-ctx.textAlign = 'right'; ctx.fillStyle = '#FFD41F'; ctx.font = F(800, 46); ctx.fillText(opt.title, W - P, 98);
-ctx.fillStyle = '#ffffff'; ctx.font = F(600, 32); ctx.fillText(opt.no, W - P, 146);
-ctx.textAlign = 'left';
-let y = 250;
-const firmL = (META.logos && META.logos[o.bayi]) || LOGOS[o.bayi], fl = await loadImg(firmL && firmL.src);
-ctx.fillStyle = '#f4f5f7'; ctx.fillRect(P, y, W - 2 * P, 210);
-ctx.fillStyle = '#6b7280'; ctx.font = F(500, 24); ctx.fillText('FİRMA', P + 28, y + 44);
-ctx.fillStyle = '#111111'; ctx.font = F(700, 40); ctx.fillText(o.bayi, P + 28, y + 92);
-if (fl) { const h2 = 90, w2 = Math.min(240, h2 * fl.width / fl.height); ctx.drawImage(fl, W - P - 28 - w2, y + 24, w2, h2); }
-ctx.fillStyle = '#6b7280'; ctx.font = F(500, 24);
-ctx.fillText(opt.d1[0], P + 28, y + 146); if (opt.d2) ctx.fillText(opt.d2[0], P + 420, y + 146);
-ctx.fillStyle = '#111111'; ctx.font = F(600, 30);
-ctx.fillText(opt.d1[1], P + 28, y + 186); if (opt.d2) ctx.fillText(opt.d2[1], P + 420, y + 186);
-if (opt.status) {
-ctx.textAlign = 'right'; ctx.fillStyle = opt.status[1]; ctx.font = F(800, 30);
-ctx.fillText(opt.status[0], W - P - 28, y + 186); ctx.textAlign = 'left';
-}
-y += 250;
-ctx.fillStyle = '#6b7280'; ctx.font = F(600, 24); ctx.fillText('ÜRÜN', P, y); ctx.textAlign = 'right'; ctx.fillText('MİKTAR', W - P, y); ctx.textAlign = 'left';
-y += 18; ctx.fillStyle = '#111111'; ctx.fillRect(P, y, W - 2 * P, 3); y += 22;
-rows.forEach(r => {
-let yy = y + 34;
-ctx.fillStyle = '#111111'; ctx.font = F(600, 34);
-r.name.forEach((l, k) => ctx.fillText(l, P, yy + k * 44));
-ctx.textAlign = 'right'; ctx.font = F(800, 40); ctx.fillText(`${num(r.i.qty - (Number(r.i.hardener_qty) > 0 && hardOf(r.i.product_id) > 0 ? Math.min(Number(r.i.hardener_qty), r.i.qty) : 0))} L`, W - P, yy + 4); ctx.textAlign = 'left';
-yy += r.name.length * 44 - 6;
-ctx.fillStyle = '#b45309'; ctx.font = F(500, 26); r.sub.forEach((l, k) => ctx.fillText(l, P, yy + k * 34));
-y += r.h;
-ctx.fillStyle = '#e5e7eb'; ctx.fillRect(P, y - 8, W - 2 * P, 2);
-});
-if (o.items.length > 1) {
-y += 50; ctx.fillStyle = '#111111'; ctx.font = F(800, 36); ctx.fillText('TOPLAM', P, y);
-const tt = totL(o.items), tp = tt.split(' + ');
-ctx.textAlign = 'right'; ctx.fillText(tp[0], W - P, y);
-if (tp[1]) { ctx.font = F(600, 28); ctx.fillStyle = '#b45309'; ctx.fillText('+ ' + tp[1], W - P, y + 40); ctx.fillStyle = '#111111'; y += 40; }
-ctx.textAlign = 'left'; y += 30;
-}
-if (noteL.length) {
-y += 40; ctx.fillStyle = '#fff7d6'; ctx.fillRect(P, y, W - 2 * P, 40 + noteL.length * 40);
-ctx.fillStyle = '#111111'; ctx.font = F(600, 30); noteL.forEach((l, k) => ctx.fillText(l, P + 24, y + 48 + k * 40));
-y += 40 + noteL.length * 40;
-}
-ctx.fillStyle = '#9ca3af'; ctx.font = F(400, 22);
-ctx.fillText(`Yıldız Kumlama Boya • Emanet Stok Takibi • ${dt(new Date())}`, P, H - 40);
-return new Promise(res => c.toBlob(b => res(b), 'image/png'));
-}
-function waNumber(ph) {
-let d = String(ph || '').replace(/\D/g, '');
-if (!d) return '';
-if (d.startsWith('00')) d = d.slice(2);
-if (d.length === 11 && d.startsWith('0')) d = '90' + d.slice(1);
-else if (d.length === 10 && d.startsWith('5')) d = '90' + d;
-return d.length >= 11 ? d : '';
-}
-const firmPhone = name => { const u = users.find(x => x.name === name); return u && waNumber(u.phone); };
-function shareToFirm() {
-if (!shareData || !shareData.phone) return;
-window.open(`https://wa.me/${shareData.phone}?text=${encodeURIComponent(shareData.text)}`, '_blank');
-}
-async function openOrderShare(id) {
-const o = orders.find(x => x.id === id);
-if (!o) return;
-const blob = await drawOrderImage(o);
-if (!blob) return notify('Görsel oluşturulamadı.', 'danger');
-const name = `${orderNo(o)}_${o.bayi}.png`.replace(/[^\wçğıöşüÇĞİÖŞÜ.-]+/g, '_');
-shareData = { blob, name, text: orderShareText(o), file: new File([blob], name, { type: 'image/png' }), phone: isAdmin() ? firmPhone(o.bayi) : '' };
-$('shareFirmBtn').classList.toggle('d-none', !shareData.phone);
-$('shareFirmTxt').innerText = `WhatsApp'tan Gönder: ${o.bayi}`;
-const img = $('shareImg');
-if (img.dataset.url) URL.revokeObjectURL(img.dataset.url);
-img.dataset.url = URL.createObjectURL(blob); img.src = img.dataset.url;
-$('shareTitle').innerText = `Sipariş Özeti • ${orderNo(o)}`;
-shareModal.show();
-}
-function shipShareObj(s) {
-const pending = isPending(s);
-return { bayi: s.supplier, note: s.approve_note || '',
-items: s.items.map(i => ({ ...i, qty: pending ? i.qty : (i.received_qty ?? i.qty) })) };
-}
-function shipShareText(s) {
-const o = shipShareObj(s), pending = isPending(s);
-const lines = [`*SEVKİYAT #${s.irsaliye_no}*`, `${s.supplier} → Yıldız Kumlama Boya`, `Sevk tarihi: ${dt(s.created_at)}`];
-if (s.order_id) lines.push(`Sipariş: ${orderNoById(s.order_id)}`);
-lines.push(`Durum: ${pending ? 'Teslim onayı bekliyor' : `Teslim alındı (${dt(s.approved_at)})`}`, '');
-o.items.forEach(i => { const t = tnkI(i, i.qty); lines.push(`• ${i.product_name}: *${qL(i, i.qty)}*${t ? ` — ${t}` : ''}`); });
-if (o.items.length > 1) lines.push(`Toplam: ${totL(o.items)}`);
-if (o.note) lines.push('', `Not: ${o.note}`);
-return lines.join('\n');
-}
-async function openShipShare(id) {
-const s = shipments.find(x => x.id === id);
-if (!s) return;
-const pending = isPending(s);
-const blob = await drawOrderImage(shipShareObj(s), {
-title: 'SEVKİYAT', no: '#' + s.irsaliye_no, d1: ['SEVK TARİHİ', dt(s.created_at)],
-d2: s.order_id ? ['SİPARİŞ NO', orderNoById(s.order_id)] : null,
-status: pending ? ['ONAY BEKLİYOR', '#b45309'] : ['TESLİM ALINDI', '#198754'] });
-if (!blob) return notify('Görsel oluşturulamadı.', 'danger');
-const name = `Sevkiyat_${s.irsaliye_no}_${s.supplier}.png`.replace(/[^\wçğıöşüÇĞİÖŞÜ.-]+/g, '_');
-shareData = { blob, name, text: shipShareText(s), file: new File([blob], name, { type: 'image/png' }), phone: isAdmin() ? firmPhone(s.supplier) : '' };
-$('shareFirmBtn').classList.toggle('d-none', !shareData.phone);
-$('shareFirmTxt').innerText = `WhatsApp'tan Gönder: ${s.supplier}`;
-const img = $('shareImg');
-if (img.dataset.url) URL.revokeObjectURL(img.dataset.url);
-img.dataset.url = URL.createObjectURL(blob); img.src = img.dataset.url;
-$('shareTitle').innerText = `Sevkiyat Özeti • #${s.irsaliye_no}`;
-shareModal.show();
-}
-async function shareNow() {
-if (!shareData) return;
-const files = [shareData.file];
-try {
-if (navigator.canShare && navigator.canShare({ files })) {
-await navigator.share({ files, title: shareData.name, text: shareData.text });
-return;
-}
-} catch (e) { if (e && e.name === 'AbortError') return; }
-shareDownload();
-notify('Görsel indirildi; WhatsApp açılıyor, görseli oradan ekleyebilirsiniz.', 'secondary');
-setTimeout(shareText, 600);
-}
-function shareDownload() {
-if (!shareData) return;
-if (ANDROID()) {
-const fr = new FileReader();
-fr.onload = () => { try { window.AndroidBridge.saveFile(shareData.name, String(fr.result).split(',')[1], 'image/png'); } catch (e) { /* yoksay */ } };
-fr.readAsDataURL(shareData.blob);
-return;
-}
-const a = document.createElement('a'); a.href = URL.createObjectURL(shareData.blob); a.download = shareData.name;
-document.body.appendChild(a); a.click(); setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 1000);
-}
-function shareText() {
-if (!shareData) return;
-window.open('https://wa.me/?text=' + encodeURIComponent(shareData.text), '_blank');
-}
-const orderNo = o => `SIP-${new Date(o.created_at).getFullYear()}-${String(o.id).padStart(4, '0')}`;
-const orderNoById = id => { const o = orders.find(x => x.id === id); return o ? orderNo(o) : `SIP-${String(id).padStart(4, '0')}`; };
-const orderShips = o => shipments.filter(s => s.order_id === o.id);

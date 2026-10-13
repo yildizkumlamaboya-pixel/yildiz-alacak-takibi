@@ -1,3 +1,193 @@
+async function openStatement() {
+const bayi = isAdmin() ? $('repBayiSel').value : me.name;
+if (!bayi) return notify('Mutabakat ekstresi için yukarıdan firma seçin.', 'warning');
+const { f, t } = rangeIso();
+const r = await rpc('portal_statement', { p_bayi: bayi, p_from: f ? f.toISOString() : null, p_to: t ? t.toISOString() : null });
+if (!r) return;
+const rows = (r.data || []).map(x => ({ ...x, start: Number(x.start), added: Number(x.added), delivered: Number(x.delivered), other: Number(x.other), end: Number(x.end) }));
+if (!rows.length) return notify('Bu firmaya tanımlı emanet stok kalemi yok.', 'warning');
+const sum = k => r2(rows.reduce((a, x) => a + x[k], 0));
+const periodTxt = `${f ? dOnly(f) : 'Başlangıç'} – ${$('repTo').value ? dOnly($('repTo').value + 'T00:00:00') : dOnly(new Date())}`;
+const endTxt = $('repTo').value ? dOnly($('repTo').value + 'T00:00:00') : dOnly(new Date());
+const dels = shipments.filter(s => s.supplier === bayi && !isPending(s) && (!f || new Date(s.approved_at) >= f) && (!t || new Date(s.approved_at) < t))
+.sort((a, b) => new Date(a.approved_at) - new Date(b.approved_at));
+const cell = v => `<td class="text-end text-nowrap">${num(v)}</td>`;
+const html = `
+${docHeader('EMANET STOK MUTABAKAT EKSTRESİ', `<div>Dönem: <b>${periodTxt}</b></div>`)}
+<table class="doc-meta mb-2">
+<tr>
+<td><div class="doc-lbl">Emanet Sahibi</div><div class="fw-bold">Yıldız Kumlama Boya</div></td>
+<td><div class="doc-lbl">Teslim Edecek Firma</div><div class="fw-bold d-flex align-items-center gap-2">${firmLogo(bayi, 26)}${esc(bayi)}</div></td>
+</tr>
+</table>
+<div class="doc-h2">Kalem Bazında Durum (Litre)</div>
+<table class="doc-items">
+<thead><tr><th style="width:14%">Kod</th><th>Ürün</th><th class="text-end">Dönem Başı</th><th class="text-end">Eklenen</th>
+<th class="text-end">Teslim Alınan</th><th class="text-end">Diğer*</th><th class="text-end">Dönem Sonu Kalan</th></tr></thead>
+<tbody>${rows.map(x => `<tr><td>${esc(x.code)}</td><td>${esc(x.name)}</td>${cell(x.start)}${cell(x.added)}${cell(x.delivered)}${cell(x.other)}
+<td class="text-end text-nowrap fw-bold">${num(x.end)}</td></tr>`).join('')}</tbody>
+<tfoot><tr><td colspan="2" class="text-end">Toplam</td>${cell(sum('start'))}${cell(sum('added'))}${cell(sum('delivered'))}${cell(sum('other'))}
+<td class="text-end text-nowrap">${num(sum('end'))}</td></tr></tfoot>
+</table>
+<div class="doc-lbl mt-1">* Diğer: düzeltmeler, onay iptalleri, silinen teslimatlar ve emanet stok düşümleri. Dönem Sonu = Dönem Başı + Eklenen − Teslim Alınan + Diğer.</div>
+<div class="doc-h2">Dönem İçi Teslimatlar</div>
+${dels.length ? `
+<table class="doc-items">
+<thead><tr><th style="width:1%" class="text-nowrap">Teslim Tarihi</th><th>İrsaliye</th><th>Ürün</th>
+<th class="text-end text-nowrap" style="width:1%">Bildirilen</th><th class="text-end text-nowrap" style="width:1%">Teslim Alınan</th></tr></thead>
+<tbody>${dels.flatMap(s => s.items.map(i => `<tr>
+<td class="text-nowrap">${dOnly(s.approved_at)}</td><td>${esc(s.irsaliye_no)}</td>
+<td>${esc(i.product_name)}${i.note ? `<div class="doc-lbl">${esc(i.note)}</div>` : ''}</td>
+<td class="text-end text-nowrap">${num(i.qty)}</td><td class="text-end text-nowrap fw-bold">${num(i.received_qty)}</td></tr>`)).join('')}</tbody>
+</table>` : '<div class="doc-lbl">Bu dönemde teslimat yok.</div>'}
+<p class="mt-3 mb-0">${endTxt} tarihi itibarıyla <b>${esc(bayi)}</b> firmasının Yıldız Kumlama Boya'ya teslim etmesi gereken
+kalan miktarlar yukarıdaki "Dönem Sonu Kalan" sütununda gösterilmiştir (toplam <b>${num(sum('end'))} Litre</b>).
+Taraflar bu miktarlar üzerinde mutabıktır.</p>
+<div class="doc-sign">
+<div><div class="doc-lbl">Yıldız Kumlama Boya<br>Kaşe / İmza</div></div>
+<div><div class="doc-lbl">${esc(bayi)}<br>Kaşe / İmza</div></div>
+</div>
+${docFooter()}`;
+showDoc(html, `Mutabakat-${bayi}-${$('repTo').value || ymd(new Date())}`);
+}
+async function changeOwnPassword() {
+const oldP = $('pwOld').value, newP = $('pwNew').value, newP2 = $('pwNew2').value;
+if (!oldP || !newP) return notify('Tüm alanları doldurunuz.', 'warning');
+if (newP.length < 4) return notify('Yeni şifre en az 4 karakter olmalı.', 'warning');
+if (newP !== newP2) return notify('Yeni şifreler eşleşmiyor.', 'warning');
+const { error } = await sb.rpc('portal_change_password', { p_name: me.name, p_old: oldP, p_new: newP });
+if (error) return notify(error.message, 'danger');
+myPass = newP;
+$('pwOld').value = $('pwNew').value = $('pwNew2').value = '';
+notify('Şifreniz güncellendi.');
+}
+async function loadUsers() {
+const r = await rpc('portal_admin_users');
+if (!r) return;
+users = r.data || [];
+const rows = users.map((u, i) => ({ u, i })).filter(x => x.u.role === 'bayi');
+$('bayiList').innerHTML = !rows.length
+? `<div class="text-secondary small text-center py-2">Henüz firma yok.</div>`
+: rows.map(({ u, i }) => `
+<div class="border rounded-3 p-2 ps-3 d-flex justify-content-between align-items-center ${u.active ? '' : 'bg-light'}">
+<div>
+<div class="fw-semibold small d-flex align-items-center gap-2 ${u.active ? '' : 'text-secondary'}">${firmLogo(u.name, 20)}${esc(u.name)}</div>
+<div class="d-flex flex-wrap gap-1 mt-1">
+${u.username ? `<span class="badge text-bg-light border" style="font-size:.6rem"><i class="bi bi-person"></i> ${esc(u.username)}</span>` : ''}
+${u.phone ? `<span class="badge text-bg-light border text-success" style="font-size:.6rem"><i class="bi bi-whatsapp"></i> ${esc(u.phone)}</span>` : ''}
+${u.has_password ? `<span class="badge text-bg-success bg-opacity-75" style="font-size:.6rem">Şifre tanımlı</span>`
+: `<span class="badge text-bg-warning" style="font-size:.6rem">Şifre yok - giriş yapamaz</span>`}
+${u.active ? '' : `<span class="badge text-bg-secondary" style="font-size:.6rem">Pasif</span>`}
+</div>
+</div>
+<div class="d-flex gap-1">
+<button onclick="openBayiModal(${i})" class="btn btn-sm btn-outline-dark" title="Şifre / logo"><i class="bi bi-pencil"></i></button>
+<button onclick="busy(this, () => toggleBayi(${i}))" class="btn btn-sm ${u.active ? 'btn-outline-danger' : 'btn-outline-success'}" title="${u.active ? 'Pasif yap' : 'Aktif yap'}">
+<i class="bi ${u.active ? 'bi-person-dash' : 'bi-person-check'}"></i>
+</button>
+</div>
+</div>`).join('');
+const act = users.filter(u => u.role === 'bayi' && u.active);
+const cur = $('newAllowedBayi').value;
+$('newAllowedBayi').innerHTML = act.length
+? act.map(u => `<option value="${esc(u.name)}">${esc(u.name)}</option>`).join('')
+: `<option value="">Önce firma ekleyin</option>`;
+if (act.some(u => u.name === cur)) $('newAllowedBayi').value = cur;
+if (me) { fillSelects(); renderPersonnel(); }
+}
+function openBayiModal(i) {
+bayiEditingNew = (i === undefined);
+const u = bayiEditingNew ? null : users[i];
+$('bayiModalTitle').innerText = bayiEditingNew ? 'Yeni Firma' : 'Firmayı Düzenle';
+$('bayiPass').placeholder = bayiEditingNew || !u.has_password ? 'En az 4 karakter' : 'Değiştirmeyecekseniz boş bırakın';
+bayiLogoNew = undefined;
+showBayiLogo(u ? ((META.logos && META.logos[u.name]) || LOGOS[u.name]) : null, !!(u && META.logos && META.logos[u.name]));
+$('bayiName').value = u ? u.name : '';
+$('bayiName').readOnly = !bayiEditingNew;
+$('bayiName').classList.toggle('bg-light', !bayiEditingNew);
+$('bayiNameHint').classList.toggle('d-none', !bayiEditingNew);
+$('bayiPass').value = '';
+$('bayiUser').value = u ? (u.username || '') : '';
+$('bayiPhone').value = u ? (u.phone || '') : '';
+bayiModal.show();
+}
+let bayiLogoNew;
+function showBayiLogo(L, removable) {
+$('bayiLogoPrev').innerHTML = L ? `<img src="${L.src}" alt="" style="max-width:120px;max-height:62px;object-fit:contain">`
+: '<span class="tiny text-secondary">Logo yok</span>';
+$('bayiLogoDel').classList.toggle('d-none', !removable);
+}
+function shrinkImage(file, max = 360) {
+return new Promise((resolve, reject) => {
+const url = URL.createObjectURL(file), img = new Image();
+img.onload = () => {
+const k = Math.min(1, max / Math.max(img.width, img.height));
+const w = Math.max(1, Math.round(img.width * k)), h = Math.max(1, Math.round(img.height * k));
+const c = document.createElement('canvas'); c.width = w; c.height = h;
+c.getContext('2d').drawImage(img, 0, 0, w, h);
+URL.revokeObjectURL(url);
+let src = c.toDataURL('image/webp', 0.85);
+if (!src.startsWith('data:image/webp')) src = c.toDataURL('image/png');
+resolve({ src, r: Math.round(w / h * 1000) / 1000 });
+};
+img.onerror = () => { URL.revokeObjectURL(url); reject(new Error('resim')); };
+img.src = url;
+});
+}
+async function pickBayiLogo(input) {
+const f = input.files[0]; input.value = '';
+if (!f) return;
+try { bayiLogoNew = await shrinkImage(f); showBayiLogo(bayiLogoNew, true); }
+catch (e) { notify('Resim okunamadı.', 'danger'); }
+}
+function clearBayiLogo() {
+bayiLogoNew = null;
+const name = $('bayiName').value.trim();
+showBayiLogo(LOGOS[name] || null, false);
+}
+async function saveBayi() {
+const name = $('bayiName').value.trim(), pass = $('bayiPass').value, uname = $('bayiUser').value.trim();
+const cur = bayiEditingNew ? null : users.find(u => u.name === name);
+const unameChanged = uname !== ((cur && cur.username) || '');
+const phone = $('bayiPhone').value.trim();
+const phoneChanged = phone.replace(/\D/g, '') !== String((cur && cur.phone) || '').replace(/\D/g, '');
+if (phone && !waNumber(phone)) return notify('Telefon numarası geçersiz (ör. 0532 123 45 67).', 'warning');
+if (!name) return notify('Firma adı giriniz.', 'warning');
+if (!uname) return notify('Kullanıcı adı giriniz.', 'warning');
+if (!/^[A-Za-z0-9._-]{3,30}$/.test(uname)) return notify('Kullanıcı adı 3-30 karakter olmalı; Türkçe karakter ve boşluk kullanmayın.', 'warning');
+if (users.some(u => u.name !== name && ((u.username || '').toLowerCase() === uname.toLowerCase() || u.name.toLowerCase() === uname.toLowerCase())))
+return notify('Bu kullanıcı adı başka bir hesapta kullanılıyor.', 'warning');
+if ((bayiEditingNew || pass) && pass.length < 4) return notify('Şifre en az 4 karakter olmalı.', 'warning');
+if (bayiEditingNew && users.some(u => u.name.toLocaleLowerCase('tr') === name.toLocaleLowerCase('tr')))
+return notify('Bu isimde bir hesap zaten var.', 'warning');
+if (!bayiEditingNew && !pass && !unameChanged && !phoneChanged && bayiLogoNew === undefined) return notify('Değişiklik yapılmadı.', 'secondary');
+if (bayiEditingNew || pass) {
+const r = await rpc('portal_admin_save_bayi', { p_name: name, p_new_pass: pass });
+if (!r) return;
+}
+if (unameChanged) {
+const { error } = await sb.rpc('portal_admin_set_username', { p_user: me.name, p_pass: myPass, p_name: name, p_username: uname });
+if (error) {
+if (bayiEditingNew) { bayiEditingNew = false; await loadUsers(); }
+return notify(/portal_admin_set_username|function|schema cache/i.test(error.message)
+? "Kullanıcı adı için Supabase'de kullanici-adi.sql kurulumunun çalıştırılması gerekiyor." : error.message, 'danger');
+}
+}
+if (phoneChanged) {
+const { error } = await sb.rpc('portal_admin_set_phone', { p_user: me.name, p_pass: myPass, p_name: name, p_phone: phone || null });
+if (error) return notify(/portal_admin_set_phone|function|schema cache/i.test(error.message)
+? "Telefon için Supabase'de 12-firma-telefon.sql çalıştırılmalı." : error.message, 'danger');
+}
+if (bayiLogoNew !== undefined) {
+const { error } = await sb.rpc('portal_admin_set_logo', { p_user: me.name, p_pass: myPass, p_name: name, p_logo: bayiLogoNew });
+if (error) return notify(/portal_admin_set_logo|function|schema cache/i.test(error.message)
+? "Logo için Supabase'de teneke-logo.sql kurulumunun çalıştırılması gerekiyor." : error.message, 'danger');
+}
+bayiModal.hide();
+notify(bayiEditingNew ? 'Firma hesabı oluşturuldu.' : 'Firma bilgileri güncellendi.');
+await loadData();
+await loadUsers();
+}
 async function toggleBayi(i) {
 const u = users[i];
 if (u.active && !confirm(`${u.name} pasif yapılsın mı? Bu firma giriş yapamayacak (kayıtları silinmez).`)) return;

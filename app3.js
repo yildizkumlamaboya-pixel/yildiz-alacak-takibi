@@ -1,3 +1,187 @@
+function orderShareText(o) {
+const st = orderState(o);
+const lines = [`*SİPARİŞ ${orderNo(o)}*`, `Yıldız Kumlama Boya → ${o.bayi}`, `Tarih: ${dt(o.created_at)}`];
+if (o.due_date) lines.push(`Termin: ${dOnly(o.due_date + 'T00:00:00')}`);
+if (st !== 'open') lines.push(`Durum: ${({ cancelled: 'İptal', converted: 'Tamamlandı', partial: `Kısmi sevk (kalan ${num(orderProgress(o).rem)} L)` })[st]}`);
+lines.push('');
+o.items.forEach(i => { const t = tnkI(i, i.qty); lines.push(`• ${i.product_name}: *${qL(i, i.qty)}*${t ? ` — ${t}` : ''}`); });
+const total = r2(o.items.reduce((a, i) => a + i.qty, 0));
+if (o.items.length > 1) lines.push(`Toplam: ${totL(o.items)}`);
+if (o.note) lines.push('', `Not: ${o.note}`);
+return lines.join('\n');
+}
+async function drawOrderImage(o, opt) {
+const W = 1080, P = 64, c = document.createElement('canvas'), ctx = c.getContext('2d');
+const F = (w, s) => `${w} ${s}px Inter, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif`;
+const st0 = opt ? null : orderState(o);
+opt = opt || {
+title: 'SİPARİŞ', no: orderNo(o), d1: ['SİPARİŞ TARİHİ', dt(o.created_at)],
+d2: o.due_date ? ['TERMİN', dOnly(o.due_date + 'T00:00:00')] : null,
+status: st0 === 'open' ? null : { cancelled: ['İPTAL', '#dc3545'], converted: ['TAMAMLANDI', '#198754'], partial: ['KISMİ SEVK', '#b45309'] }[st0]
+};
+const total = r2(o.items.reduce((a, i) => a + i.qty, 0));
+ctx.font = F(600, 34);
+const rows = o.items.map(i => {
+ctx.font = F(600, 34); const name = wrapLines(ctx, i.product_name, W - 2 * P - 300);
+ctx.font = F(400, 26);
+const hqv = Number(i.hardener_qty) > 0 && hardOf(i.product_id) > 0 ? Math.min(Number(i.hardener_qty), i.qty) : 0;
+const t = [hqv ? `+ ${num(hqv)} L sertleştirici` : '', tnkI(i, i.qty)].filter(Boolean).join(' • '), sub = t ? wrapLines(ctx, t, W - 2 * P - 40) : [];
+return { i, name, sub, h: 34 + name.length * 44 + sub.length * 34 + 22 };
+});
+ctx.font = F(600, 30);
+const noteL = o.note ? wrapLines(ctx, 'Not: ' + o.note, W - 2 * P - 48) : [];
+const H = 230 + 250 + 70 + rows.reduce((a, r) => a + r.h, 0) + (o.items.length > 1 ? 130 : 0) + (noteL.length ? 70 + noteL.length * 40 : 0) + 120;
+c.width = W; c.height = H;
+ctx.fillStyle = '#ffffff'; ctx.fillRect(0, 0, W, H);
+ctx.fillStyle = '#111111'; ctx.fillRect(0, 0, W, 200);
+ctx.fillStyle = '#FFD41F'; ctx.fillRect(0, 200, W, 10);
+const myL = (META.logos && META.logos['Yıldız Kumlama Boya']) || LOGOS['Yıldız Kumlama Boya'];
+const logo = await loadImg(myL && myL.src);
+ctx.fillStyle = '#ffffff';
+if (logo) {
+const lh = 120, lw = Math.min(460, lh * (logo.width / logo.height));
+ctx.fillRect(P - 16, 40, lw + 32, lh + 0);
+ctx.drawImage(logo, P, 40, lw, lh);
+} else { ctx.font = F(800, 52); ctx.fillText('YILDIZ KUMLAMA BOYA', P, 120); }
+ctx.textAlign = 'right'; ctx.fillStyle = '#FFD41F'; ctx.font = F(800, 46); ctx.fillText(opt.title, W - P, 98);
+ctx.fillStyle = '#ffffff'; ctx.font = F(600, 32); ctx.fillText(opt.no, W - P, 146);
+ctx.textAlign = 'left';
+let y = 250;
+const firmL = (META.logos && META.logos[o.bayi]) || LOGOS[o.bayi], fl = await loadImg(firmL && firmL.src);
+ctx.fillStyle = '#f4f5f7'; ctx.fillRect(P, y, W - 2 * P, 210);
+ctx.fillStyle = '#6b7280'; ctx.font = F(500, 24); ctx.fillText('FİRMA', P + 28, y + 44);
+ctx.fillStyle = '#111111'; ctx.font = F(700, 40); ctx.fillText(o.bayi, P + 28, y + 92);
+if (fl) { const h2 = 90, w2 = Math.min(240, h2 * fl.width / fl.height); ctx.drawImage(fl, W - P - 28 - w2, y + 24, w2, h2); }
+ctx.fillStyle = '#6b7280'; ctx.font = F(500, 24);
+ctx.fillText(opt.d1[0], P + 28, y + 146); if (opt.d2) ctx.fillText(opt.d2[0], P + 420, y + 146);
+ctx.fillStyle = '#111111'; ctx.font = F(600, 30);
+ctx.fillText(opt.d1[1], P + 28, y + 186); if (opt.d2) ctx.fillText(opt.d2[1], P + 420, y + 186);
+if (opt.status) {
+ctx.textAlign = 'right'; ctx.fillStyle = opt.status[1]; ctx.font = F(800, 30);
+ctx.fillText(opt.status[0], W - P - 28, y + 186); ctx.textAlign = 'left';
+}
+y += 250;
+ctx.fillStyle = '#6b7280'; ctx.font = F(600, 24); ctx.fillText('ÜRÜN', P, y); ctx.textAlign = 'right'; ctx.fillText('MİKTAR', W - P, y); ctx.textAlign = 'left';
+y += 18; ctx.fillStyle = '#111111'; ctx.fillRect(P, y, W - 2 * P, 3); y += 22;
+rows.forEach(r => {
+let yy = y + 34;
+ctx.fillStyle = '#111111'; ctx.font = F(600, 34);
+r.name.forEach((l, k) => ctx.fillText(l, P, yy + k * 44));
+ctx.textAlign = 'right'; ctx.font = F(800, 40); ctx.fillText(`${num(r.i.qty - (Number(r.i.hardener_qty) > 0 && hardOf(r.i.product_id) > 0 ? Math.min(Number(r.i.hardener_qty), r.i.qty) : 0))} L`, W - P, yy + 4); ctx.textAlign = 'left';
+yy += r.name.length * 44 - 6;
+ctx.fillStyle = '#b45309'; ctx.font = F(500, 26); r.sub.forEach((l, k) => ctx.fillText(l, P, yy + k * 34));
+y += r.h;
+ctx.fillStyle = '#e5e7eb'; ctx.fillRect(P, y - 8, W - 2 * P, 2);
+});
+if (o.items.length > 1) {
+y += 50; ctx.fillStyle = '#111111'; ctx.font = F(800, 36); ctx.fillText('TOPLAM', P, y);
+const tt = totL(o.items), tp = tt.split(' + ');
+ctx.textAlign = 'right'; ctx.fillText(tp[0], W - P, y);
+if (tp[1]) { ctx.font = F(600, 28); ctx.fillStyle = '#b45309'; ctx.fillText('+ ' + tp[1], W - P, y + 40); ctx.fillStyle = '#111111'; y += 40; }
+ctx.textAlign = 'left'; y += 30;
+}
+if (noteL.length) {
+y += 40; ctx.fillStyle = '#fff7d6'; ctx.fillRect(P, y, W - 2 * P, 40 + noteL.length * 40);
+ctx.fillStyle = '#111111'; ctx.font = F(600, 30); noteL.forEach((l, k) => ctx.fillText(l, P + 24, y + 48 + k * 40));
+y += 40 + noteL.length * 40;
+}
+ctx.fillStyle = '#9ca3af'; ctx.font = F(400, 22);
+ctx.fillText(`Yıldız Kumlama Boya • Emanet Stok Takibi • ${dt(new Date())}`, P, H - 40);
+return new Promise(res => c.toBlob(b => res(b), 'image/png'));
+}
+function waNumber(ph) {
+let d = String(ph || '').replace(/\D/g, '');
+if (!d) return '';
+if (d.startsWith('00')) d = d.slice(2);
+if (d.length === 11 && d.startsWith('0')) d = '90' + d.slice(1);
+else if (d.length === 10 && d.startsWith('5')) d = '90' + d;
+return d.length >= 11 ? d : '';
+}
+const firmPhone = name => { const u = users.find(x => x.name === name); return u && waNumber(u.phone); };
+function shareToFirm() {
+if (!shareData || !shareData.phone) return;
+window.open(`https://wa.me/${shareData.phone}?text=${encodeURIComponent(shareData.text)}`, '_blank');
+}
+async function openOrderShare(id) {
+const o = orders.find(x => x.id === id);
+if (!o) return;
+const blob = await drawOrderImage(o);
+if (!blob) return notify('Görsel oluşturulamadı.', 'danger');
+const name = `${orderNo(o)}_${o.bayi}.png`.replace(/[^\wçğıöşüÇĞİÖŞÜ.-]+/g, '_');
+shareData = { blob, name, text: orderShareText(o), file: new File([blob], name, { type: 'image/png' }), phone: isAdmin() ? firmPhone(o.bayi) : '' };
+$('shareFirmBtn').classList.toggle('d-none', !shareData.phone);
+$('shareFirmTxt').innerText = `WhatsApp'tan Gönder: ${o.bayi}`;
+const img = $('shareImg');
+if (img.dataset.url) URL.revokeObjectURL(img.dataset.url);
+img.dataset.url = URL.createObjectURL(blob); img.src = img.dataset.url;
+$('shareTitle').innerText = `Sipariş Özeti • ${orderNo(o)}`;
+shareModal.show();
+}
+function shipShareObj(s) {
+const pending = isPending(s);
+return { bayi: s.supplier, note: s.approve_note || '',
+items: s.items.map(i => ({ ...i, qty: pending ? i.qty : (i.received_qty ?? i.qty) })) };
+}
+function shipShareText(s) {
+const o = shipShareObj(s), pending = isPending(s);
+const lines = [`*SEVKİYAT #${s.irsaliye_no}*`, `${s.supplier} → Yıldız Kumlama Boya`, `Sevk tarihi: ${dt(s.created_at)}`];
+if (s.order_id) lines.push(`Sipariş: ${orderNoById(s.order_id)}`);
+lines.push(`Durum: ${pending ? 'Teslim onayı bekliyor' : `Teslim alındı (${dt(s.approved_at)})`}`, '');
+o.items.forEach(i => { const t = tnkI(i, i.qty); lines.push(`• ${i.product_name}: *${qL(i, i.qty)}*${t ? ` — ${t}` : ''}`); });
+if (o.items.length > 1) lines.push(`Toplam: ${totL(o.items)}`);
+if (o.note) lines.push('', `Not: ${o.note}`);
+return lines.join('\n');
+}
+async function openShipShare(id) {
+const s = shipments.find(x => x.id === id);
+if (!s) return;
+const pending = isPending(s);
+const blob = await drawOrderImage(shipShareObj(s), {
+title: 'SEVKİYAT', no: '#' + s.irsaliye_no, d1: ['SEVK TARİHİ', dt(s.created_at)],
+d2: s.order_id ? ['SİPARİŞ NO', orderNoById(s.order_id)] : null,
+status: pending ? ['ONAY BEKLİYOR', '#b45309'] : ['TESLİM ALINDI', '#198754'] });
+if (!blob) return notify('Görsel oluşturulamadı.', 'danger');
+const name = `Sevkiyat_${s.irsaliye_no}_${s.supplier}.png`.replace(/[^\wçğıöşüÇĞİÖŞÜ.-]+/g, '_');
+shareData = { blob, name, text: shipShareText(s), file: new File([blob], name, { type: 'image/png' }), phone: isAdmin() ? firmPhone(s.supplier) : '' };
+$('shareFirmBtn').classList.toggle('d-none', !shareData.phone);
+$('shareFirmTxt').innerText = `WhatsApp'tan Gönder: ${s.supplier}`;
+const img = $('shareImg');
+if (img.dataset.url) URL.revokeObjectURL(img.dataset.url);
+img.dataset.url = URL.createObjectURL(blob); img.src = img.dataset.url;
+$('shareTitle').innerText = `Sevkiyat Özeti • #${s.irsaliye_no}`;
+shareModal.show();
+}
+async function shareNow() {
+if (!shareData) return;
+const files = [shareData.file];
+try {
+if (navigator.canShare && navigator.canShare({ files })) {
+await navigator.share({ files, title: shareData.name, text: shareData.text });
+return;
+}
+} catch (e) { if (e && e.name === 'AbortError') return; }
+shareDownload();
+notify('Görsel indirildi; WhatsApp açılıyor, görseli oradan ekleyebilirsiniz.', 'secondary');
+setTimeout(shareText, 600);
+}
+function shareDownload() {
+if (!shareData) return;
+if (ANDROID()) {
+const fr = new FileReader();
+fr.onload = () => { try { window.AndroidBridge.saveFile(shareData.name, String(fr.result).split(',')[1], 'image/png'); } catch (e) { /* yoksay */ } };
+fr.readAsDataURL(shareData.blob);
+return;
+}
+const a = document.createElement('a'); a.href = URL.createObjectURL(shareData.blob); a.download = shareData.name;
+document.body.appendChild(a); a.click(); setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 1000);
+}
+function shareText() {
+if (!shareData) return;
+window.open('https://wa.me/?text=' + encodeURIComponent(shareData.text), '_blank');
+}
+const orderNo = o => `SIP-${new Date(o.created_at).getFullYear()}-${String(o.id).padStart(4, '0')}`;
+const orderNoById = id => { const o = orders.find(x => x.id === id); return o ? orderNo(o) : `SIP-${String(id).padStart(4, '0')}`; };
+const orderShips = o => shipments.filter(s => s.order_id === o.id);
 function orderProgress(o) {
 const ships = orderShips(o), sent = {}, sentH = {};
 ships.forEach(s => s.items.forEach(i => {
@@ -360,205 +544,5 @@ p_note: $('apvNote').value.trim(), p_items: items.map(({ qty, ...x }) => x)
 if (!r) return;
 approveModal.hide();
 notify('Teslim alındı, emanet stoktan düşüldü.');
-await loadData();
-}
-function renderStock() {
-const list = visibleProducts();
-if (!list.length) {
-$('stockList').innerHTML = `<div class="card p-4 text-center text-secondary small">${isAdmin()
-? 'Henüz emanet stok kalemi yok. Önce Ürünler ekranından ürün ekleyin, sonra aşağıdan firmaya atayın.'
-: 'Size tanımlı emanet stok kalemi yok.'}</div>`;
-$('stockPager').innerHTML = '';
-return;
-}
-const sorted = sortProducts(list), firmTotal = {};
-sorted.forEach(p => { firmTotal[p.allowed_bayi] = r2((firmTotal[p.allowed_bayi] || 0) + p.qty); });
-const groups = {};
-pageSlice(sorted, 'stock').forEach(p => (groups[p.allowed_bayi] = groups[p.allowed_bayi] || []).push(p));
-$('stockPager').innerHTML = pagerHtml(sorted.length, 'stock');
-$('stockList').innerHTML = Object.keys(groups).map(b => {
-const items = groups[b];
-const total = firmTotal[b];
-return `
-<div class="mb-3">
-${isAdmin() ? `<div class="d-flex align-items-center gap-2 mb-2 px-1">
-${firmLogo(b, 22)}<span class="fw-semibold small">${esc(b)}</span>
-<span class="badge text-bg-light border">Toplam kalan ${num(total)} L</span></div>` : ''}
-<div class="vstack gap-2">${items.map(p => {
-const st = balanceState(p);
-const wait = pendingQty(p.id);
-return `
-<div class="card p-3 d-flex flex-row justify-content-between align-items-center clickable ${st.cls}" onclick="openProductReport(${p.id})">
-<div class="me-2">
-<div class="fw-semibold small">${esc(p.name)}</div>
-<div class="tiny text-secondary">${esc(p.code)}${wait ? ` • <span class="text-warning-emphasis"><i class="bi bi-hourglass-split"></i> ${num(wait)} L onay bekliyor</span>` : ''}</div>
-</div>
-<div class="d-flex align-items-center gap-2 text-end">
-<div>
-<div class="tiny text-secondary">Kalan</div>
-<div class="fw-bold ${st.txt}">${num(p.qty)} L</div>
-${tnk(p.id, p.qty) ? `<div class="tiny text-secondary text-nowrap">≈ ${tnk(p.id, p.qty)}</div>` : ''}
-${st.badge}
-</div>
-${isAdmin() ? `<button class="btn btn-sm btn-light border" title="Düzenle" onclick="event.stopPropagation(); openProductEdit(${p.id})"><i class="bi bi-pencil"></i></button>` : ''}
-</div>
-</div>`;
-}).join('')}</div>
-</div>`;
-}).join('');
-}
-function productOptions(list, withBayi) {
-return sortProducts(list).map(p =>
-`<option value="${p.id}">${esc((withBayi ? p.allowed_bayi + ' • ' : '') + p.name)} (Kalan: ${num(p.qty)} L)</option>`).join('');
-}
-function fillSelects() {
-const keep = (id, html) => { const el = $(id), cur = el.value; el.innerHTML = html; if ([...el.options].some(o => o.value === cur)) el.value = cur; };
-if (isAdmin()) {
-keep('adjProduct', productOptions(products, true) || '<option value="">Önce emanet stok kalemi ekleyin</option>');
-keep('repBayiSel', `<option value="">Tüm Firmalar</option>` + bayiNames().map(n => `<option value="${esc(n)}">${esc(n)}</option>`).join(''));
-const firms = [me.name, ...bayiNames()];
-keep('audFirm', '<option value="">Tüm firmalar ve işlemler</option>' + bayiNames().map(n => `<option value="${esc(n)}">${esc(n)}</option>`).join(''));
-keep('perFirm', firms.map(f => `<option value="${esc(f)}">${esc(f)}${f === me.name ? ' (teslim alanlar)' : ''}</option>`).join(''));
-const ob = $('ordBayi').value;
-keep('ordBayi', bayiNames().map(n => `<option value="${esc(n)}">${esc(n)}</option>`).join('') || '<option value="">Önce firma ekleyin</option>');
-if ($('ordBayi').value !== ob || !$('ordItems').querySelector('.it-rows, .alert')) resetOrderForm();
-fillNewCatalog();
-}
-fillRepProducts();
-}
-function openProductEdit(id) {
-editingProduct = prodById(id);
-if (!editingProduct) return;
-$('peName').innerText = `${editingProduct.name} (${editingProduct.code})`;
-$('peBayi').innerText = `Firma: ${editingProduct.allowed_bayi} • Kalan: ${num(editingProduct.qty)} L`;
-$('peCritical').value = editingProduct.critical || '';
-productModal.show();
-}
-async function saveProductEdit() {
-const r = await rpc('portal_update_product', { p_id: editingProduct.id, p_critical: parseFloat($('peCritical').value) || 0 });
-if (!r) return;
-productModal.hide();
-notify('Kalem güncellendi.');
-await loadData();
-}
-async function deleteProduct() {
-const p = editingProduct;
-if (!confirm(`${p.allowed_bayi} - ${p.name} emanet stok kalemi ve hareket geçmişi silinsin mi?\n\n(Sevkiyat kaydı olan kalem silinemez.)`)) return;
-const r = await rpc('portal_delete_product', { p_id: p.id });
-if (!r) return;
-productModal.hide();
-notify('Emanet stok kalemi silindi.');
-await loadData();
-}
-async function processAdjust() {
-const pid = Number($('adjProduct').value);
-const qty = parseFloat($('adjQty').value);
-const sign = document.querySelector('input[name="adjType"]:checked').value === '-1' ? -1 : 1;
-if (!pid) return notify('Önce emanet stok kalemi tanımlayın.', 'warning');
-if (!qty || qty <= 0) return notify('Miktar giriniz.', 'warning');
-const p = prodById(pid);
-if (sign < 0 && !confirm(`${p.allowed_bayi} - ${p.name}\nEmanet stoktan ${num(qty)} L düşülecek. Devam edilsin mi?`)) return;
-const r = await rpc('portal_adjust_receivable', { p_product_id: pid, p_qty: sign * qty, p_note: $('adjNote').value });
-if (!r) return;
-$('adjQty').value = ''; $('adjNote').value = '';
-notify(sign > 0 ? 'Emanet stok eklendi.' : 'Emanet stoktan düşüldü.');
-fold('adj', false);
-await loadData();
-}
-async function addNewProduct() {
-const bayi = $('newAllowedBayi').value;
-const cid = Number($('newCatalog').value);
-if (!bayi) return notify('Önce Ayarlar > Firma Hesapları bölümünden firma ekleyin.', 'warning');
-if (!cid) return notify(catalog.length ? 'Bu firmaya eklenecek ürün kalmadı.' : 'Önce Ürünler ekranından ürün ekleyin.', 'warning');
-const r = await rpc('portal_add_product', {
-p_bayi: bayi, p_catalog_id: cid,
-p_critical: parseFloat($('newCritical').value) || 0, p_opening: parseFloat($('newOpening').value) || 0
-});
-if (!r) return;
-['newOpening', 'newCritical'].forEach(id => $(id).value = '');
-notify('Emanet stok kalemi eklendi.');
-fold('kalem', false);
-await loadData();
-}
-function fillNewCatalog() {
-const bayi = $('newAllowedBayi').value;
-const used = new Set(products.filter(p => p.allowed_bayi === bayi).map(p => p.catalog_id));
-const list = catalog.slice().sort((a, b) => trCmp(a.name, b.name)).filter(c => !used.has(c.id));
-$('newCatalog').innerHTML = list.length
-? list.map(c => `<option value="${c.id}">${esc(c.name)} (${esc(c.code)})</option>`).join('')
-: `<option value="">${catalog.length ? 'Bu firmaya tüm ürünler eklenmiş' : 'Önce Ürünler ekranından ürün ekleyin'}</option>`;
-}
-function renderCatalog() {
-if (!isAdmin()) return;
-const q = $('catSearch').value.trim().toLocaleLowerCase('tr');
-const firms = [...new Set(products.map(p => p.allowed_bayi))].sort(trCmp), curF = $('catFirm').value;
-$('catFirm').innerHTML = `<option value="">Tüm firmalar</option>${firms.map(f => `<option value="${esc(f)}">${esc(f)}</option>`).join('')}<option value="__none">Firmaya atanmamış</option>`;
-$('catFirm').value = [...$('catFirm').options].some(o => o.value === curF) ? curF : '';
-const fF = $('catFirm').value, fT = $('catType').value;
-const list = catalog.slice().sort((a, b) => trCmp(a.name, b.name))
-.filter(c => !q || `${c.code} ${c.name}`.toLocaleLowerCase('tr').includes(q))
-.filter(c => {
-const used = products.filter(p => p.catalog_id === c.id).map(p => p.allowed_bayi);
-if (fF === '__none' ? used.length : fF && !used.includes(fF)) return false;
-const pk = Number(c.pack_size) || 0, h = c.hardener_size == null ? null : Number(c.hardener_size);
-if (fT === 'hard') return pk > 0 && h > 0;
-if (fT === 'nohard') return pk > 0 && !(h > 0);
-if (fT === 'nopack') return !pk;
-return true;
-});
-$('catCount').innerText = list.length === catalog.length ? `${catalog.length} ürün` : `${list.length} / ${catalog.length} ürün`;
-$('catPager').innerHTML = pagerHtml(list.length, 'cat');
-$('catalogList').innerHTML = !list.length
-? `<div class="card p-4 text-center text-secondary small">${catalog.length ? 'Arama ve filtrelere uyan ürün yok.' : 'Henüz ürün yok. Yukarıdan ekleyin.'}</div>`
-: pageSlice(list, 'cat').map(c => {
-const used = products.filter(p => p.catalog_id === c.id);
-return `
-<div class="card p-3 d-flex flex-row justify-content-between align-items-center">
-<div class="me-2">
-<div class="fw-semibold small">${esc(c.name)}</div>
-<div class="tiny text-secondary">${esc(c.code)} • ${c.pack_size ? `<span class="text-primary">${packTxt(Number(c.pack_size), c.hardener_size == null ? null : Number(c.hardener_size))}</span>` : 'Litre'} • ${used.length
-? used.map(p => `${esc(p.allowed_bayi)}: ${num(p.qty)} L`).join(', ')
-: '<span class="fst-italic">firmaya atanmadı</span>'}</div>
-</div>
-<div class="d-flex gap-1 flex-shrink-0">
-<button class="btn btn-sm btn-light border" title="Düzenle" onclick="openCatEdit(${c.id})"><i class="bi bi-pencil"></i></button>
-<button class="btn btn-sm btn-outline-danger" title="Sil" onclick="busy(this, () => deleteCatalog(${c.id}))"><i class="bi bi-trash"></i></button>
-</div>
-</div>`;
-}).join('');
-}
-function readHard(inputId, chkId, pack) {
-if ($(chkId).checked) return 0;
-const v = $(inputId).value;
-if (v === '') return null;
-const h = parseFloat(v);
-if (!(h > 0)) { notify('Sertleştirici litresi geçersiz.', 'warning'); return undefined; }
-if (!(pack > 0)) { notify('Sertleştirici için önce teneke litresini girin.', 'warning'); return undefined; }
-return h;
-}
-function toggleNoHard(chk, inputId) {
-$(inputId).disabled = chk.checked;
-if (chk.checked) $(inputId).value = '';
-}
-function setHardFields(inputId, chkId, h) {
-$(chkId).checked = h === 0;
-$(inputId).disabled = h === 0;
-$(inputId).value = h > 0 ? h : '';
-}
-async function addCatalog() {
-const code = $('catCode').value.trim(), name = $('catName').value.trim();
-if (!code || !name) return notify('Ürün kodu ve adını giriniz.', 'warning');
-const pack = parseFloat($('catPack').value);
-if ($('catPack').value !== '' && !(pack > 0)) return notify('Teneke litresi geçersiz.', 'warning');
-const hard = readHard('catHard', 'catNoHard', pack);
-if (hard === undefined) return;
-const params = { p_code: code, p_name: name };
-if (pack > 0) params.p_pack = pack;
-if (hard !== null) params.p_hard = hard;
-const r = await rpc('portal_catalog_add', params);
-if (!r) return;
-$('catCode').value = ''; $('catName').value = ''; $('catPack').value = ''; setHardFields('catHard', 'catNoHard', null);
-notify('Ürün eklendi.');
-fold('urun', false);
 await loadData();
 }

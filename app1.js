@@ -108,6 +108,114 @@ a.href = URL.createObjectURL(blob); a.download = filename;
 document.body.appendChild(a); a.click(); a.remove();
 setTimeout(() => URL.revokeObjectURL(a.href), 1500);
 }
+function downloadBlob(blob, filename) {
+if (ANDROID()) {
+const fr = new FileReader();
+fr.onload = () => { try { window.AndroidBridge.saveFile(filename, String(fr.result).split(',')[1], blob.type || 'application/octet-stream'); } catch (e) { /* yoksay */ } };
+fr.readAsDataURL(blob);
+return;
+}
+const a = document.createElement('a');
+a.href = URL.createObjectURL(blob); a.download = filename;
+document.body.appendChild(a); a.click(); a.remove();
+setTimeout(() => URL.revokeObjectURL(a.href), 3000);
+}
+function loadScript(src) {
+return new Promise((res, rej) => { const s = document.createElement('script'); s.src = src; s.onload = res; s.onerror = rej; document.head.appendChild(s); });
+}
+const CRC_T = (() => { const t = new Uint32Array(256); for (let n = 0; n < 256; n++) { let c = n; for (let k = 0; k < 8; k++) c = c & 1 ? 0xEDB88320 ^ (c >>> 1) : c >>> 1; t[n] = c >>> 0; } return t; })();
+function crc32(b) { let c = 0xFFFFFFFF; for (let i = 0; i < b.length; i++) c = CRC_T[(c ^ b[i]) & 0xFF] ^ (c >>> 8); return (c ^ 0xFFFFFFFF) >>> 0; }
+function zipStore(files) {
+const enc = new TextEncoder(), parts = [], cen = [];
+let off = 0;
+const u16 = v => [v & 255, (v >>> 8) & 255], u32 = v => [v & 255, (v >>> 8) & 255, (v >>> 16) & 255, (v >>> 24) & 255];
+files.forEach(f => {
+const nm = enc.encode(f.name), crc = crc32(f.data), sz = f.data.length;
+const hdr = new Uint8Array([0x50, 0x4b, 3, 4, ...u16(20), ...u16(0x0800), ...u16(0), ...u16(0), ...u16(0x21), ...u32(crc), ...u32(sz), ...u32(sz), ...u16(nm.length), ...u16(0)]);
+parts.push(hdr, nm, f.data);
+cen.push(new Uint8Array([0x50, 0x4b, 1, 2, ...u16(20), ...u16(20), ...u16(0x0800), ...u16(0), ...u16(0), ...u16(0x21), ...u32(crc), ...u32(sz), ...u32(sz),
+...u16(nm.length), ...u16(0), ...u16(0), ...u16(0), ...u16(0), ...u32(0), ...u32(off)]), nm);
+off += hdr.length + nm.length + sz;
+});
+const cenLen = cen.reduce((a, b) => a + b.length, 0);
+const end = new Uint8Array([0x50, 0x4b, 5, 6, ...u16(0), ...u16(0), ...u16(files.length), ...u16(files.length), ...u32(cenLen), ...u32(off), ...u16(0)]);
+return new Blob([...parts, ...cen, end], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+}
+function xlsxBuild(sheets) {
+const enc = new TextEncoder();
+const x = v => String(v).replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F]/g, '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+const col = i => { let s = ''; i++; while (i > 0) { const m = (i - 1) % 26; s = String.fromCharCode(65 + m) + s; i = Math.floor((i - 1) / 26); } return s; };
+const NS = 'xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"';
+const files = [];
+const add = (name, s) => files.push({ name, data: enc.encode(s) });
+add('[Content_Types].xml', `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/><Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/>${sheets.map((_, k) => `<Override PartName="/xl/worksheets/sheet${k + 1}.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>`).join('')}</Types>`);
+add('_rels/.rels', `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>`);
+add('xl/workbook.xml', `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><workbook ${NS}><sheets>${sheets.map((s, k) => `<sheet name="${x(s.name.slice(0, 31))}" sheetId="${k + 1}" r:id="rId${k + 1}"/>`).join('')}</sheets></workbook>`);
+add('xl/_rels/workbook.xml.rels', `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">${sheets.map((_, k) => `<Relationship Id="rId${k + 1}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet${k + 1}.xml"/>`).join('')}<Relationship Id="rId${sheets.length + 1}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/></Relationships>`);
+add('xl/styles.xml', `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><numFmts count="1"><numFmt numFmtId="164" formatCode="#,##0.##"/></numFmts><fonts count="2"><font><sz val="11"/><name val="Calibri"/></font><font><b/><sz val="11"/><name val="Calibri"/></font></fonts><fills count="3"><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill><fill><patternFill patternType="solid"><fgColor rgb="FFFFD41F"/><bgColor indexed="64"/></patternFill></fill></fills><borders count="1"><border><left/><right/><top/><bottom/><diagonal/></border></borders><cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs><cellXfs count="3"><xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/><xf numFmtId="0" fontId="1" fillId="2" borderId="0" xfId="0" applyFont="1" applyFill="1"/><xf numFmtId="164" fontId="0" fillId="0" borderId="0" xfId="0" applyNumberFormat="1"/></cellXfs><cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles></styleSheet>`);
+sheets.forEach((s, k) => {
+const ncol = Math.max(1, ...s.rows.map(r => r.length));
+const rows = s.rows.map((r, ri) => `<row r="${ri + 1}">${r.map((v, ci) => {
+const ref = col(ci) + (ri + 1);
+if (v === '' || v == null) return '';
+if (typeof v === 'number' && isFinite(v)) return `<c r="${ref}"${ri ? ' s="2"' : ' s="1"'}><v>${v}</v></c>`;
+return `<c r="${ref}" t="inlineStr"${ri ? '' : ' s="1"'}><is><t xml:space="preserve">${x(v)}</t></is></c>`;
+}).join('')}</row>`).join('');
+add(`xl/worksheets/sheet${k + 1}.xml`, `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><worksheet ${NS}><sheetViews><sheetView workbookViewId="0"><pane ySplit="1" topLeftCell="A2" activePane="bottomLeft" state="frozen"/></sheetView></sheetViews><cols>${(s.widths || []).map((w, ci) => `<col min="${ci + 1}" max="${ci + 1}" width="${w}" customWidth="1"/>`).join('')}</cols><sheetData>${rows}</sheetData>${s.rows.length > 1 ? `<autoFilter ref="A1:${col(ncol - 1)}${s.rows.length}"/>` : ''}</worksheet>`);
+});
+return zipStore(files);
+}
+async function exportExcel() {
+const mv = await rpc('portal_movements', { p_from: null, p_to: null, p_bayi: null, p_product_id: null, p_type: null, p_shipment_id: null });
+if (!mv) return;
+const n = v => v == null || v === '' ? '' : Number(v);
+const d = v => v ? new Date(v).toLocaleString('tr-TR') : '';
+const prodOf = id => prodById(id) || {};
+const sheets = [];
+const sheet = (rows, widths) => ({ rows, widths });
+const tnkN = (pid, q) => packOf(pid) ? Math.round(q / packOf(pid) * 100) / 100 : '';
+const stock = [['Firma', 'Ürün Kodu', 'Ürün', 'Kalan (L)', 'Teneke (≈)', 'Teneke L', 'Sertleştirici L', 'Uyarı Seviyesi (L)']];
+sortProducts(visibleProducts()).forEach(p => stock.push([p.allowed_bayi, p.code, p.name, n(p.qty), tnkN(p.id, p.qty), packOf(p.id) || '', hardOf(p.id) ?? '', n(p.critical) || '']));
+sheets.push({ name: 'Emanet Stok', ...sheet(stock, [20, 12, 36, 12, 11, 10, 14, 16]) });
+const sh = [['Bildirim Tarihi', 'Firma', 'İrsaliye No', 'Sipariş No', 'Durum', 'Düzenleyen', 'Teslim Alan', 'Teslim Tarihi', 'Ürün Kodu', 'Ürün',
+'Bildirilen Toplam (L)', 'Boya (L)', 'Sertleştirici (L)', 'Gelen (L)', 'Teneke', 'Not']];
+shipments.slice().sort((a, b) => String(a.created_at).localeCompare(String(b.created_at))).forEach(s => s.items.forEach(i => {
+const hq = Number(i.hardener_qty) > 0 ? Math.min(Number(i.hardener_qty), i.qty) : 0;
+sh.push([d(s.created_at), s.supplier, s.irsaliye_no, s.order_id ? orderNoById(s.order_id) : '', isPending(s) ? 'Onay bekliyor' : 'Teslim alındı',
+s.prepared_by || '', s.received_by || s.approved_by || '', d(s.approved_at), i.code || '', i.product_name,
+n(i.qty), n(r2(i.qty - hq)), hq || '', isPending(s) ? '' : n(i.received_qty), tnkN(i.product_id, r2(i.qty - hq)), i.note || s.approve_note || '']);
+}));
+sheets.push({ name: 'Sevkiyatlar', ...sheet(sh, [18, 18, 14, 15, 14, 16, 16, 18, 11, 34, 12, 10, 12, 10, 9, 24]) });
+const st = { open: 'Açık', partial: 'Kısmi sevk', converted: 'Tamamlandı', cancelled: 'İptal' };
+const od = [['Sipariş No', 'Tarih', 'Firma', 'Termin', 'Durum', 'Ürün Kodu', 'Ürün', 'Sipariş Toplam (L)', 'Boya (L)', 'Sertleştirici (L)', 'Sevk Edilen (L)', 'Kalan (L)', 'Not']];
+orders.slice().sort((a, b) => String(a.created_at).localeCompare(String(b.created_at))).forEach(o => {
+const pr = orderProgress(o), state = st[orderState(o)];
+pr.items.forEach(({ i, sent, rem }) => {
+const hq = Number(i.hardener_qty) > 0 ? Math.min(Number(i.hardener_qty), i.qty) : 0;
+od.push([orderNo(o), d(o.created_at), o.bayi, o.due_date ? dOnly(o.due_date + 'T00:00:00') : '', state, i.code || '', i.product_name,
+n(i.qty), n(r2(i.qty - hq)), hq || '', n(Math.min(sent, i.qty)), n(rem), o.note || '']);
+});
+});
+sheets.push({ name: 'Siparişler', ...sheet(od, [15, 18, 18, 11, 12, 11, 34, 14, 10, 12, 13, 10, 24]) });
+const hv = [['Tarih', 'Firma', 'Ürün Kodu', 'Ürün', 'Hareket', 'Miktar (L)', 'Kalan (L)', 'Açıklama', 'İşlemi Yapan']];
+(mv.data || []).slice().sort((a, b) => String(a.created_at).localeCompare(String(b.created_at))).forEach(m => {
+const p = prodOf(m.product_id);
+hv.push([d(m.created_at), m.bayi || p.allowed_bayi || '', p.code || '', p.name || '(silinmiş kalem)', emn(m.movement_type), n(m.qty), n(m.balance_after), emn(m.note || ''), m.created_by || '']);
+});
+sheets.push({ name: 'Hareketler', ...sheet(hv, [18, 18, 11, 34, 20, 11, 11, 30, 18]) });
+if (isAdmin()) {
+const ur = [['Ürün Kodu', 'Ürün', 'Teneke (L)', 'Sertleştirici (L)', 'Atandığı Firmalar']];
+catalog.slice().sort((a, b) => trCmp(a.name, b.name)).forEach(c => ur.push([c.code, c.name, n(c.pack_size), c.hardener_size == null ? '' : (Number(c.hardener_size) === 0 ? 'sertleştiricisiz' : n(c.hardener_size)),
+products.filter(p => p.catalog_id === c.id).map(p => p.allowed_bayi).join(', ')]));
+sheets.push({ name: 'Ürünler', ...sheet(ur, [12, 36, 11, 15, 30]) });
+}
+const who = isAdmin() ? 'Tum-Firmalar' : me.name.replace(/\s+/g, '-');
+const fname = `Emanet-Stok-Yedek_${who}_${ymd(new Date())}.xlsx`;
+const blob = xlsxBuild(sheets);
+window._lastXlsx = blob;
+downloadBlob(blob, fname);
+notify(`Excel yedeği indirildi (${shipments.length} sevkiyat, ${orders.length} sipariş, ${(mv.data || []).length} hareket).`);
+}
 const visibleProducts = () => isAdmin() ? products : products.filter(p => p.allowed_bayi === me.name);
 const bayiNames = () => [...new Set([...users.filter(u => u.role === 'bayi').map(u => u.name), ...products.map(p => p.allowed_bayi),
 ...shipments.map(s => s.supplier)])].sort(trCmp);
@@ -355,212 +463,4 @@ switchTab('tabAna', true);
 armBackGuard();
 pushOn = false; updatePushUi();
 pushEnable(false);
-}
-function logout() {
-if (me) pushDetach(me.name, myPass);
-$('pushAsk').classList.add('d-none');
-$('ordFormCard').classList.add('d-none'); $('ordOpenBtn').classList.remove('d-none');
-sessionSet(null);
-me = null; myPass = null;
-navStack = []; currentTab = 'tabAna'; clearTimeout(exitTimer);
-['adj', 'kalem', 'urun'].forEach(k => fold(k, false));
-catalog = []; products = []; shipments = []; personnel = []; users = []; backups = []; reportMoves = []; orders = [];
-convertingOrder = null; pendingSevk = null;
-closeDoc();
-[approveModal, editModal, detailModal, productModal, catModal, bayiModal].forEach(m => m.hide());
-if (channel) { sb.removeChannel(channel); channel = null; }
-$('loginSection').classList.remove('d-none');
-$('bootLoading').classList.add('d-none');
-$('appSection').classList.add('d-none');
-setTimeout(fillLastUser, 0);
-$('bottomNav').classList.add('d-none');
-$('logoutBtn').classList.add('d-none');
-$('settingsBtn').classList.add('d-none');
-$('liveDot').classList.add('d-none');
-$('userFirm').innerText = '';
-$('userRoleTitle').innerText = 'Emanet Stok Takibi';
-}
-const VAPID_PUBLIC = 'BOGosaNnUI8PNLOw5X7T1XxXJBt70flv9tJdTGq76RkNOr9AzNOy9oDyXOdw5Xhxz8dE8ty55x_mH-JHUNBtmMI';
-const PUSH_ASK_KEY = 'yks_bildirim_sorma', PUSH_OFF_KEY = 'yks_bildirim_kapali';
-let pushOn = false;
-const pushSupported = () => !DEMO && 'serviceWorker' in navigator && 'PushManager' in window && 'Notification' in window && window.isSecureContext;
-const pushWhatText = () => isAdmin()
-? 'Firmalar yeni sevkiyat bildirdiğinde telefonunuza bildirim gelir (uygulama kapalıyken de).'
-: 'Yeni sipariş geldiğinde ve sevkiyatınız teslim alındığında telefonunuza bildirim gelir (uygulama kapalıyken de).';
-function b64ToBytes(s) {
-const b = atob((s + '='.repeat((4 - s.length % 4) % 4)).replace(/-/g, '+').replace(/_/g, '/'));
-return Uint8Array.from(b, c => c.charCodeAt(0));
-}
-async function pushSubscription(create) {
-const reg = await navigator.serviceWorker.ready;
-let sub = await reg.pushManager.getSubscription();
-if (sub && create) {
-const k = sub.options && sub.options.applicationServerKey;
-if (k && btoa(String.fromCharCode(...new Uint8Array(k))).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '') !== VAPID_PUBLIC) {
-await sub.unsubscribe(); sub = null;
-}
-}
-if (!sub && create) sub = await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: b64ToBytes(VAPID_PUBLIC) });
-return sub;
-}
-async function pushEnable(ask) {
-if (!me || !pushSupported()) return updatePushUi();
-if (!ask && lsGet(PUSH_OFF_KEY) === '1') return updatePushUi();
-try {
-if (Notification.permission !== 'granted') {
-if (!ask) return updatePushUi();
-const perm = await Notification.requestPermission();
-if (perm !== 'granted') { lsSet(PUSH_ASK_KEY, '1'); notify('Bildirim izni verilmedi.', 'warning'); return updatePushUi(); }
-}
-const sub = await pushSubscription(true), j = sub.toJSON();
-const { error } = await sb.rpc('portal_push_subscribe', { p_user: me.name, p_pass: myPass, p_endpoint: j.endpoint, p_p256dh: j.keys.p256dh, p_auth: j.keys.auth });
-if (error) {
-pushOn = false;
-if (ask) notify(/portal_push_subscribe|function|schema cache/i.test(error.message)
-? "Bildirimler için Supabase'de bildirim.sql kurulumunun çalıştırılması gerekiyor." : error.message, 'danger');
-return updatePushUi();
-}
-pushOn = true;
-lsSet(PUSH_OFF_KEY, '0');
-if (ask) notify('Bildirimler açıldı.');
-} catch (e) {
-pushOn = false;
-if (ask) notify('Bildirim açılamadı: ' + (e && e.message || e), 'danger');
-}
-updatePushUi();
-}
-async function pushDisable() {
-try {
-const sub = await pushSubscription(false);
-if (sub) {
-await sb.rpc('portal_push_unsubscribe', { p_user: me.name, p_pass: myPass, p_endpoint: sub.endpoint });
-await sub.unsubscribe();
-}
-} catch (e) { /* yoksay */ }
-pushOn = false; lsSet(PUSH_ASK_KEY, '1'); lsSet(PUSH_OFF_KEY, '1');
-notify('Bu cihazda bildirimler kapatıldı.', 'secondary');
-updatePushUi();
-}
-async function pushTest() {
-const r = await rpc('portal_push_test');
-if (!r) return;
-notify(r.data ? 'Test bildirimi gönderildi, birkaç saniye içinde gelir.' : 'Bu hesapta bildirime açık cihaz yok.', r.data ? 'success' : 'warning');
-}
-function pushAskLater() { lsSet(PUSH_ASK_KEY, '1'); $('pushAsk').classList.add('d-none'); }
-function pushDetach(name, pass) {
-if (!pushSupported() || !name) return;
-navigator.serviceWorker.ready.then(r => r.pushManager.getSubscription()).then(sub => {
-if (sub) sb.rpc('portal_push_unsubscribe', { p_user: name, p_pass: pass, p_endpoint: sub.endpoint });
-}).catch(() => {});
-}
-function updatePushUi() {
-if (!me) return;
-const sup = pushSupported(), perm = sup ? Notification.permission : 'unsupported';
-$('pushWhat').innerText = pushWhatText();
-$('pushAskText').innerText = pushWhatText();
-$('pushAsk').classList.toggle('d-none', !(sup && perm === 'default' && lsGet(PUSH_ASK_KEY) !== '1'));
-$('pushState').innerHTML = !sup
-? (DEMO ? '<span class="text-secondary">Yerel modda bildirim yok.</span>'
-: '<span class="text-warning-emphasis"><i class="bi bi-exclamation-triangle me-1"></i>Bu tarayıcı bildirimi desteklemiyor. Android\'de Chrome ile açın; iPhone\'da önce Paylaş → Ana Ekrana Ekle yapın ve oradan açın.</span>')
-: perm === 'denied'
-? '<span class="text-danger"><i class="bi bi-x-circle me-1"></i>Bildirim izni kapalı. Telefon Ayarlar → Uygulamalar (veya tarayıcı site ayarları) → Bildirimler kısmından izin verin.</span>'
-: pushOn ? '<span class="text-success"><i class="bi bi-check-circle me-1"></i>Bu cihazda bildirimler açık.</span>'
-: '<span class="text-secondary">Bu cihazda bildirimler kapalı.</span>';
-$('pushOnBtn').classList.toggle('d-none', !sup || perm === 'denied' || pushOn);
-$('pushTestBtn').classList.toggle('d-none', !pushOn);
-$('pushOffBtn').classList.toggle('d-none', !pushOn);
-}
-function armBackGuard() {
-try { history.pushState({ yks: Date.now() }, ''); } catch (e) { /* yoksay */ }
-}
-function handleBack() {
-const open = document.querySelector('.modal.show');
-if (open) { const m = bootstrap.Modal.getInstance(open); if (m) m.hide(); return true; }
-if (!$('docView').classList.contains('d-none')) { closeDoc(); return true; }
-let prev = navStack.pop();
-while (prev && prev === currentTab) prev = navStack.pop();
-if (!prev && currentTab !== 'tabAna') prev = 'tabAna';
-if (!prev) return false;
-if (!TABS.includes(prev) || (prev === 'tabSevkEt' && isAdmin()) || (prev === 'tabUrun' && !isAdmin())) prev = 'tabAna';
-switchTab(prev, true);
-return true;
-}
-window.addEventListener('popstate', () => {
-if (!me) return;
-clearTimeout(exitTimer);
-if (handleBack()) { armBackGuard(); return; }
-notify('Çıkmak için tekrar geri tuşuna basın.', 'secondary');
-exitTimer = setTimeout(armBackGuard, 2000);
-});
-function initRealtime() {
-if (channel) sb.removeChannel(channel);
-channel = sb.channel('portal-pulse')
-.on('postgres_changes', { event: '*', schema: 'public', table: 'portal_pulse' }, scheduleReload)
-.subscribe(status => $('liveDot').classList.toggle('on', status === 'SUBSCRIBED'));
-}
-function scheduleReload() {
-clearTimeout(reloadTimer);
-reloadTimer = setTimeout(async () => {
-if (!me) return;
-await loadData();
-if (!$('tabRapor').classList.contains('d-none')) loadReport();
-}, 500);
-}
-const renderErrors = [];
-function showLoadError() {
-const box = $('loadErr');
-if (!box) return;
-box.classList.toggle('d-none', !renderErrors.length);
-box.innerHTML = renderErrors.length ? `<i class="bi bi-exclamation-octagon me-1"></i><b>Bir sorun oluştu, bu metni Claude'a iletin:</b><div class="tiny mt-1" style="word-break:break-word">${renderErrors.map(esc).join('<br>')}</div>` : '';
-}
-function reportError(where, e) {
-const msg = `${where}: ${e && e.message || e}`;
-if (!renderErrors.includes(msg)) renderErrors.push(msg);
-console.error(where, e);
-showLoadError();
-}
-window.addEventListener('error', ev => { if (me) reportError('Hata', ev.error || ev.message); });
-window.addEventListener('unhandledrejection', ev => { if (me) reportError('Hata', ev.reason); });
-async function loadData() {
-const [res, m] = await Promise.all([Promise.resolve(sb.rpc('portal_data', { p_user: me.name, p_pass: myPass })).catch(e => ({ error: { message: String(e && e.message || e) } })),
-Promise.resolve(sb.rpc('portal_meta', { p_user: me.name, p_pass: myPass })).catch(() => ({ error: true }))]);
-renderErrors.length = 0;
-if (res.error) {
-renderErrors.push('Veriler yüklenemedi (portal_data): ' + res.error.message);
-showLoadError();
-if (/Oturum geçersiz/.test(res.error.message)) logout();
-return;
-}
-if (m && m.error && m.error.message) renderErrors.push('portal_meta: ' + m.error.message);
-const dd = res.data || {}, anyItem = [...(dd.orders || []), ...(dd.shipments || [])].map(x => (x.items || [])[0]).find(Boolean);
-if (isAdmin() && anyItem && !('hardener_qty' in anyItem))
-renderErrors.push("Sertleştirici litresi kaydedilemiyor: Supabase'de 11-sertlestirici-litre.sql dosyasını çalıştırın.");
-const r = res;
-META = m && !m.error && m.data ? { packs: m.data.packs || {}, hards: m.data.hards || {}, logos: m.data.logos || {} } : { packs: {}, hards: {}, logos: {} };
-const d = r.data || {};
-catalog = d.catalog || [];
-products = (d.products || []).map(p => ({ ...p, qty: Number(p.qty), critical: Number(p.critical) }));
-shipments = (d.shipments || []).map(s => ({ ...s, items: (s.items || []).map(i => ({
-...i, qty: Number(i.qty), received_qty: i.received_qty == null ? null : Number(i.received_qty) })) }));
-personnel = d.personnel || [];
-orders = (d.orders || []).map(o => ({ ...o, items: (o.items || []).map(i => ({ ...i, qty: Number(i.qty) })) }));
-render();
-}
-function switchTab(tabId, fromBack = false) {
-if (!fromBack && tabId !== currentTab) {
-navStack.push(currentTab);
-if (navStack.length > 20) navStack.shift();
-}
-currentTab = tabId;
-const navId = TAB_PARENT[tabId] || tabId;
-TABS.forEach(id => {
-$(id).classList.toggle('d-none', id !== tabId);
-const b = $('btn-' + id);
-if (b) b.classList.toggle('active', id === navId);
-});
-$('settingsBtn').classList.toggle('active', tabId === 'tabAyarlar');
-if (tabId === 'tabRapor') loadReport();
-if (tabId === 'tabSevkEt' && !isAdmin()) sevkPad = preparePad($('sevkSigCanvas'), sevkPad);
-if (tabId === 'tabAyarlar' && isAdmin()) { loadUsers(); loadBackups(); loadAudit(); }
-window.scrollTo(0, 0);
 }
