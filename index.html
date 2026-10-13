@@ -40,6 +40,8 @@ input, textarea { -webkit-user-select: text; user-select: text; }
 .low-card { border-color: #fde68a !important; background: #fffbeb; }
 .done-card { background: #f9fafb; }
 .clickable { cursor: pointer; }
+.seg3 .btn { font-size: .8rem; padding: .45rem .25rem; line-height: 1.2; }
+.seg3 .btn i { font-size: 1.05rem; margin-bottom: 2px; }
 .clickable:active { transform: scale(.995); }
 .item-row { border: 1px solid #e5e7eb; border-radius: 12px; padding: .6rem; margin-bottom: .5rem; background: #fafafa; }
 .item-line { display: flex; justify-content: space-between; gap: .5rem; font-size: .82rem; padding: 2px 0; }
@@ -230,20 +232,14 @@ main.container { max-width: 1120px !important; padding-left: 1.5rem; padding-rig
 <div id="shipPager"></div>
 </section>
 <section id="tabStok" class="d-none">
-<div class="d-flex justify-content-between align-items-center mb-3 px-1 gap-2">
-<div>
+<div class="btn-group w-100 mb-3 admin-only d-none seg3" role="group">
+<button id="fold-adj-btn" class="btn btn-outline-dark" onclick="fold('adj', $('fold-adj').classList.contains('d-none'))"><i class="bi bi-plus-slash-minus d-block"></i>Ekle / Düş</button>
+<button id="fold-kalem-btn" class="btn btn-outline-dark" onclick="fold('kalem', $('fold-kalem').classList.contains('d-none'))"><i class="bi bi-plus-square d-block"></i>Kalem Ekle</button>
+<button class="btn btn-outline-dark" onclick="switchTab('tabUrun')"><i class="bi bi-list-ul d-block"></i>Ürün Listesi</button>
+</div>
+<div class="mb-2 px-1">
 <div class="section-title" id="stockTitle">Kalan Emanet Stoklar</div>
 <div class="text-secondary tiny">Hareketler için kaleme dokunun</div>
-</div>
-<div class="dropdown admin-only d-none">
-<button class="btn btn-sm btn-dark dropdown-toggle" data-bs-toggle="dropdown"><i class="bi bi-sliders me-1"></i>İşlemler</button>
-<ul class="dropdown-menu dropdown-menu-end shadow-sm">
-<li><button class="dropdown-item py-2" onclick="fold('adj', true)"><i class="bi bi-plus-slash-minus me-2"></i>Emanet Ekle / Düş</button></li>
-<li><button class="dropdown-item py-2" onclick="fold('kalem', true)"><i class="bi bi-plus-square me-2"></i>Firmaya Kalem Ekle</button></li>
-<li><hr class="dropdown-divider"></li>
-<li><button class="dropdown-item py-2" onclick="switchTab('tabUrun')"><i class="bi bi-list-ul me-2"></i>Ürün Listesi</button></li>
-</ul>
-</div>
 </div>
 <div class="card p-3 mb-3 d-none" id="fold-adj">
 <div class="d-flex justify-content-between align-items-center mb-3">
@@ -388,6 +384,19 @@ main.container { max-width: 1120px !important; padding-left: 1.5rem; padding-rig
 <span class="badge text-bg-light border" id="catCount"></span>
 </div>
 <input id="catSearch" class="form-control mb-2" placeholder="Ara: kod veya ürün adı" oninput="pages.cat = 1; renderCatalog()">
+<div class="row g-2 mb-2">
+<div class="col-6">
+<select id="catFirm" class="form-select form-select-sm" onchange="pages.cat = 1; renderCatalog()"></select>
+</div>
+<div class="col-6">
+<select id="catType" class="form-select form-select-sm" onchange="pages.cat = 1; renderCatalog()">
+<option value="">Tüm türler</option>
+<option value="hard">Sertleştiricili</option>
+<option value="nohard">Sertleştiricisiz</option>
+<option value="nopack">Teneke tanımsız</option>
+</select>
+</div>
+</div>
 <div id="catalogList" class="vstack gap-2"></div>
 <div id="catPager"></div>
 </section>

@@ -94,6 +94,7 @@ itemEditor('ordItems', products.filter(p => p.allowed_bayi === bayi), [], false)
 function fold(key, open) {
 const card = $('fold-' + key), btn = $('fold-' + key + '-btn');
 if (!card) return;
+if (open && (key === 'adj' || key === 'kalem')) fold(key === 'adj' ? 'kalem' : 'adj', false);
 card.classList.toggle('d-none', !open);
 if (btn) btn.classList.toggle('active', !!open);
 if (open) card.scrollIntoView({ behavior: 'smooth', block: 'start' });
@@ -490,12 +491,25 @@ $('newCatalog').innerHTML = list.length
 function renderCatalog() {
 if (!isAdmin()) return;
 const q = $('catSearch').value.trim().toLocaleLowerCase('tr');
+const firms = [...new Set(products.map(p => p.allowed_bayi))].sort(trCmp), curF = $('catFirm').value;
+$('catFirm').innerHTML = `<option value="">Tüm firmalar</option>${firms.map(f => `<option value="${esc(f)}">${esc(f)}</option>`).join('')}<option value="__none">Firmaya atanmamış</option>`;
+$('catFirm').value = [...$('catFirm').options].some(o => o.value === curF) ? curF : '';
+const fF = $('catFirm').value, fT = $('catType').value;
 const list = catalog.slice().sort((a, b) => trCmp(a.name, b.name))
-.filter(c => !q || `${c.code} ${c.name}`.toLocaleLowerCase('tr').includes(q));
-$('catCount').innerText = `${catalog.length} ürün`;
+.filter(c => !q || `${c.code} ${c.name}`.toLocaleLowerCase('tr').includes(q))
+.filter(c => {
+const used = products.filter(p => p.catalog_id === c.id).map(p => p.allowed_bayi);
+if (fF === '__none' ? used.length : fF && !used.includes(fF)) return false;
+const pk = Number(c.pack_size) || 0, h = c.hardener_size == null ? null : Number(c.hardener_size);
+if (fT === 'hard') return pk > 0 && h > 0;
+if (fT === 'nohard') return pk > 0 && !(h > 0);
+if (fT === 'nopack') return !pk;
+return true;
+});
+$('catCount').innerText = list.length === catalog.length ? `${catalog.length} ürün` : `${list.length} / ${catalog.length} ürün`;
 $('catPager').innerHTML = pagerHtml(list.length, 'cat');
 $('catalogList').innerHTML = !list.length
-? `<div class="card p-4 text-center text-secondary small">${catalog.length ? 'Aramaya uyan ürün yok.' : 'Henüz ürün yok. Yukarıdan ekleyin.'}</div>`
+? `<div class="card p-4 text-center text-secondary small">${catalog.length ? 'Arama ve filtrelere uyan ürün yok.' : 'Henüz ürün yok. Yukarıdan ekleyin.'}</div>`
 : pageSlice(list, 'cat').map(c => {
 const used = products.filter(p => p.catalog_id === c.id);
 return `
@@ -547,17 +561,4 @@ $('catCode').value = ''; $('catName').value = ''; $('catPack').value = ''; setHa
 notify('Ürün eklendi.');
 fold('urun', false);
 await loadData();
-}
-function openCatEdit(id) {
-editingCat = catalog.find(c => c.id === id);
-if (!editingCat) return;
-$('catEditCode').value = editingCat.code;
-$('catEditName').value = editingCat.name;
-$('catEditPack').value = editingCat.pack_size ?? '';
-setHardFields('catEditHard', 'catEditNoHard', editingCat.hardener_size == null ? null : Number(editingCat.hardener_size));
-const used = products.filter(p => p.catalog_id === id).map(p => p.allowed_bayi);
-$('catEditUsage').innerText = used.length
-? `Kullanan firmalar: ${used.join(', ')}. Yeni ad tüm emanet stok kalemlerine ve sevkiyatlara yansır.`
-: 'Bu ürün henüz bir firmaya atanmadı.';
-catModal.show();
 }

@@ -1,3 +1,16 @@
+function openCatEdit(id) {
+editingCat = catalog.find(c => c.id === id);
+if (!editingCat) return;
+$('catEditCode').value = editingCat.code;
+$('catEditName').value = editingCat.name;
+$('catEditPack').value = editingCat.pack_size ?? '';
+setHardFields('catEditHard', 'catEditNoHard', editingCat.hardener_size == null ? null : Number(editingCat.hardener_size));
+const used = products.filter(p => p.catalog_id === id).map(p => p.allowed_bayi);
+$('catEditUsage').innerText = used.length
+? `Kullanan firmalar: ${used.join(', ')}. Yeni ad tüm emanet stok kalemlerine ve sevkiyatlara yansır.`
+: 'Bu ürün henüz bir firmaya atanmadı.';
+catModal.show();
+}
 async function saveCatEdit() {
 const code = $('catEditCode').value.trim(), name = $('catEditName').value.trim();
 if (!code || !name) return notify('Ürün kodu ve adı zorunlu.', 'warning');
