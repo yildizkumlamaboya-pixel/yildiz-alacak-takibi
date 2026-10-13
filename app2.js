@@ -1,3 +1,53 @@
+function fillLastUser() {
+const u = lsGet(LAST_USER_KEY) || '';
+$('loginUser').value = u;
+if (!me && !$('loginSection').classList.contains('d-none')) (u ? $('loginPass') : $('loginUser')).focus();
+}
+const SESSION_KEY = 'yks_alacak_oturum';
+const sessionGet = () => { try { const v = localStorage.getItem(SESSION_KEY); return v ? JSON.parse(v) : null; } catch (e) { return null; } };
+const sessionSet = v => { try { v ? localStorage.setItem(SESSION_KEY, JSON.stringify(v)) : localStorage.removeItem(SESSION_KEY); } catch (e) { /* yoksay */ } };
+async function login(saved) {
+const auto = !!(saved && saved.name);
+const typed = auto ? saved.name : $('loginUser').value.trim(), pass = auto ? saved.pass : $('loginPass').value;
+if (!typed || !pass) return notify('Kullanıcı adı ve şifre giriniz.', 'warning');
+const { data, error } = await sb.rpc('portal_login', { p_name: typed, p_pass: pass });
+if (error) { if (!auto) notify('Hata: ' + error.message, 'danger'); return; }
+if (!data || !data.length) { if (auto) sessionSet(null); else notify('Kullanıcı adı veya şifre hatalı!', 'danger'); return; }
+if (!auto) {
+lsSet(LAST_USER_KEY, typed);
+sessionSet($('loginRemember').checked ? { name: data[0].name, pass } : null);
+}
+me = data[0]; myPass = pass;
+$('loginPass').value = '';
+$('loginSection').classList.add('d-none');
+$('bootLoading').classList.add('d-none');
+$('appSection').classList.remove('d-none');
+$('bottomNav').classList.remove('d-none');
+$('logoutBtn').classList.remove('d-none');
+$('settingsBtn').classList.remove('d-none');
+$('liveDot').classList.remove('d-none');
+$('userFirm').innerText = isAdmin() ? 'Yönetici' : me.name;
+$('userRoleTitle').innerText = isAdmin() ? 'Emanet Stok Takibi' : 'Emanet Stok Takibi';
+document.querySelectorAll('.admin-only').forEach(el => el.classList.toggle('d-none', !isAdmin()));
+$('sevkNewBtn').classList.toggle('d-none', isAdmin());
+$('navStokLabel').innerText = 'Depo';
+$('orderTitle').innerText = isAdmin() ? 'Verilen Siparişler' : 'Yıldız Kumlama Boya Siparişleri';
+$('stockTitle').innerText = isAdmin() ? 'Kalan Emanet Stoklar' : 'Teslim Edilecek Kalan';
+setRange('month', false);
+resetShipFilterInputs();
+shipFilter = 'all'; pages.ship = pages.order = pages.moves = 1;
+document.querySelectorAll('#shipFilterGroup .btn').forEach(b => b.classList.toggle('active', b.dataset.f === 'all'));
+toggleShipFilters(false);
+initRealtime();
+try { await loadData(); } catch (e) { reportError('loadData', e); }
+if (isAdmin()) { try { await loadUsers(); } catch (e) { reportError('loadUsers', e); } }
+resetSevkForm();
+navStack = []; currentTab = 'tabAna';
+switchTab('tabAna', true);
+armBackGuard();
+pushOn = false; updatePushUi();
+pushEnable(false);
+}
 function logout() {
 if (me) pushDetach(me.name, myPass);
 $('pushAsk').classList.add('d-none');
@@ -534,17 +584,3 @@ ${o ? o.items.filter(oi => !items.some(i => i.product_id === oi.product_id)).map
 <div class="tiny text-secondary mt-2"><i class="bi bi-info-circle"></i> "Onayla & Gönder" dediğinizde sevkiyat Yıldız Kumlama Boya'ya iletilir. Teslim alınana kadar düzenleyebilir veya silebilirsiniz.</div>`;
 sevkConfirmModal.show();
 }
-async function submitShipment() {
-if (!pendingSevk) return;
-const p = pendingSevk;
-const r = await shipRpc('portal_create_shipment', { p_irsaliye: p.no, p_prepared_by: p.person, p_items: p.items,
-p_signature: p.signature, p_order_id: p.orderId });
-if (!r) return;
-sevkConfirmModal.hide();
-notify(p.orderId ? 'Sipariş sevkiyata dönüştürüldü, teslim onayı bekleniyor.' : 'Sevkiyat bildirildi, teslim onayı bekleniyor.');
-await loadData();
-resetSevkForm();
-navStack = [];
-switchTab('tabOnay', true);
-}
-let shareData = null;

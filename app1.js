@@ -352,13 +352,18 @@ ${ed.prods.map(p => `<option value="${p.id}" ${p.id === pid ? 'selected' : ''}>$
 <button type="button" class="btn btn-sm btn-outline-danger" title="Satırı sil" onclick="removeItemRow(this, '${id}')"><i class="bi bi-x-lg"></i></button>
 </div>
 <div class="row g-2 mt-1">
+${ed.withReceived ? '' : `
+<div class="col-4 it-tk-wrap d-none">
+<div class="tiny text-secondary">Teneke (adet)</div>
+<input type="number" inputmode="decimal" class="form-control form-control-sm it-tk" placeholder="0" oninput="tkInput(this, '${id}')">
+</div>`}
 <div class="col">
 <div class="tiny text-secondary it-qlbl">${ed.withReceived ? 'Bildirilen (L)' : 'Miktar (L)'}</div>
 <input type="number" inputmode="decimal" class="form-control form-control-sm it-qty" value="${boyaInit}" placeholder="0" oninput="updateTotals('${id}')">
 </div>
 <div class="col it-hq-wrap d-none">
 <div class="tiny text-secondary">Sertleştirici (L)</div>
-<input type="number" inputmode="decimal" class="form-control form-control-sm it-hq" value="${hqInit}" placeholder="0" oninput="updateTotals('${id}')">
+<input type="number" inputmode="decimal" class="form-control form-control-sm it-hq" value="${hqInit}" placeholder="0" oninput="delete this.dataset.auto; updateTotals('${id}')">
 </div>
 ${ed.withReceived ? `
 <div class="col">
@@ -369,6 +374,15 @@ ${ed.withReceived ? `
 <div class="tiny text-primary it-pack mt-1"></div>
 ${ed.withReceived ? `<input class="form-control form-control-sm mt-2 it-note" placeholder="Not (eksik / hasarlı)" value="${esc(it.note || '')}">` : ''}`;
 rows.appendChild(row);
+updateTotals(id);
+}
+function tkInput(el, id) {
+const row = el.closest('.item-row'), pid = Number(row.querySelector('.it-prod').value);
+const pk = packOf(pid), hl = hardOf(pid), t = parseFloat(el.value);
+if (!pk) return;
+const q = row.querySelector('.it-qty'), h = row.querySelector('.it-hq');
+if (el.value === '' || !(t >= 0)) { q.value = ''; if (hl > 0) h.value = ''; }
+else { q.value = r2(t * pk); if (hl > 0) { h.value = r2(t * hl); h.dataset.auto = '1'; } }
 updateTotals(id);
 }
 function removeItemRow(btn, id) {
@@ -387,8 +401,15 @@ const hasHard = pk > 0 && hl > 0;
 r.querySelector('.it-hq-wrap').classList.toggle('d-none', !hasHard);
 r.querySelector('.it-qlbl').textContent = (ed.withReceived ? 'Bildirilen ' : '') + (hasHard ? 'boya (L)' : 'miktar (L)').replace(/^./, c => ed.withReceived ? c : c.toUpperCase());
 const b = parseFloat(r.querySelector('.it-qty').value) || 0;
-const hq = hasHard ? (parseFloat(r.querySelector('.it-hq').value) || 0) : 0;
+const hqEl = r.querySelector('.it-hq');
+if (hasHard && hqEl.dataset.auto && r.querySelector('.it-qty') === document.activeElement) hqEl.value = b > 0 ? r2(b / pk * hl) : '';
+const hq = hasHard ? (parseFloat(hqEl.value) || 0) : 0;
 r.querySelector('.it-hq').placeholder = hasHard && b > 0 ? `öneri ${num(r2(b / pk * hl))}` : '0';
+const tkEl = r.querySelector('.it-tk');
+if (tkEl) {
+tkEl.closest('.it-tk-wrap').classList.toggle('d-none', !pk);
+if (tkEl !== document.activeElement) tkEl.value = pk && b > 0 ? r2(b / pk) : '';
+}
 total += b + hq;
 const h = r.querySelector('.it-pack');
 if (h) h.textContent = !pk ? '' : (b > 0 || hq > 0)
@@ -429,53 +450,3 @@ if (!out.length) { notify('En az bir ürün ekleyin.', 'warning'); return null; 
 return out;
 }
 const LAST_USER_KEY = 'yks_son_kullanici';
-function fillLastUser() {
-const u = lsGet(LAST_USER_KEY) || '';
-$('loginUser').value = u;
-if (!me && !$('loginSection').classList.contains('d-none')) (u ? $('loginPass') : $('loginUser')).focus();
-}
-const SESSION_KEY = 'yks_alacak_oturum';
-const sessionGet = () => { try { const v = localStorage.getItem(SESSION_KEY); return v ? JSON.parse(v) : null; } catch (e) { return null; } };
-const sessionSet = v => { try { v ? localStorage.setItem(SESSION_KEY, JSON.stringify(v)) : localStorage.removeItem(SESSION_KEY); } catch (e) { /* yoksay */ } };
-async function login(saved) {
-const auto = !!(saved && saved.name);
-const typed = auto ? saved.name : $('loginUser').value.trim(), pass = auto ? saved.pass : $('loginPass').value;
-if (!typed || !pass) return notify('Kullanıcı adı ve şifre giriniz.', 'warning');
-const { data, error } = await sb.rpc('portal_login', { p_name: typed, p_pass: pass });
-if (error) { if (!auto) notify('Hata: ' + error.message, 'danger'); return; }
-if (!data || !data.length) { if (auto) sessionSet(null); else notify('Kullanıcı adı veya şifre hatalı!', 'danger'); return; }
-if (!auto) {
-lsSet(LAST_USER_KEY, typed);
-sessionSet($('loginRemember').checked ? { name: data[0].name, pass } : null);
-}
-me = data[0]; myPass = pass;
-$('loginPass').value = '';
-$('loginSection').classList.add('d-none');
-$('bootLoading').classList.add('d-none');
-$('appSection').classList.remove('d-none');
-$('bottomNav').classList.remove('d-none');
-$('logoutBtn').classList.remove('d-none');
-$('settingsBtn').classList.remove('d-none');
-$('liveDot').classList.remove('d-none');
-$('userFirm').innerText = isAdmin() ? 'Yönetici' : me.name;
-$('userRoleTitle').innerText = isAdmin() ? 'Emanet Stok Takibi' : 'Emanet Stok Takibi';
-document.querySelectorAll('.admin-only').forEach(el => el.classList.toggle('d-none', !isAdmin()));
-$('sevkNewBtn').classList.toggle('d-none', isAdmin());
-$('navStokLabel').innerText = 'Depo';
-$('orderTitle').innerText = isAdmin() ? 'Verilen Siparişler' : 'Yıldız Kumlama Boya Siparişleri';
-$('stockTitle').innerText = isAdmin() ? 'Kalan Emanet Stoklar' : 'Teslim Edilecek Kalan';
-setRange('month', false);
-resetShipFilterInputs();
-shipFilter = 'all'; pages.ship = pages.order = pages.moves = 1;
-document.querySelectorAll('#shipFilterGroup .btn').forEach(b => b.classList.toggle('active', b.dataset.f === 'all'));
-toggleShipFilters(false);
-initRealtime();
-try { await loadData(); } catch (e) { reportError('loadData', e); }
-if (isAdmin()) { try { await loadUsers(); } catch (e) { reportError('loadUsers', e); } }
-resetSevkForm();
-navStack = []; currentTab = 'tabAna';
-switchTab('tabAna', true);
-armBackGuard();
-pushOn = false; updatePushUi();
-pushEnable(false);
-}

@@ -1,3 +1,17 @@
+function updateApproveRow(inp) {
+const row = inp.closest('.item-row');
+const qty = Number(row.dataset.qty), p = prodById(Number(row.dataset.pid));
+const rec = inp.value === '' ? NaN : parseFloat(inp.value);
+const diff = !isNaN(rec) && rec !== qty;
+row.querySelector('.apv-note').classList.toggle('d-none', !diff);
+inp.classList.toggle('border-warning', diff);
+if (!p) return;
+const after = r2(p.qty - (isNaN(rec) ? 0 : rec));
+row.querySelector('.apv-after').innerHTML =
+(!isNaN(rec) && tnkI(apvItem(row), rec) ? `<div class="text-primary">Gelen: ${tnkI(apvItem(row), rec)}</div>` : '') +
+`Kalan emanet stok: ${num(p.qty)} → <b class="${after < 0 ? 'text-danger' : 'text-success'}">${num(after)} L</b>` +
+(diff ? `<div class="diff">${rec < qty ? `${num(qty - rec)} L eksik` : `${num(rec - qty)} L fazla`}</div>` : '');
+}
 async function confirmApproval() {
 const items = [];
 for (const row of $('apvItems').querySelectorAll('.item-row')) {

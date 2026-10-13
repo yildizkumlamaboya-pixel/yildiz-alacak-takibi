@@ -1,3 +1,17 @@
+async function submitShipment() {
+if (!pendingSevk) return;
+const p = pendingSevk;
+const r = await shipRpc('portal_create_shipment', { p_irsaliye: p.no, p_prepared_by: p.person, p_items: p.items,
+p_signature: p.signature, p_order_id: p.orderId });
+if (!r) return;
+sevkConfirmModal.hide();
+notify(p.orderId ? 'Sipariş sevkiyata dönüştürüldü, teslim onayı bekleniyor.' : 'Sevkiyat bildirildi, teslim onayı bekleniyor.');
+await loadData();
+resetSevkForm();
+navStack = [];
+switchTab('tabOnay', true);
+}
+let shareData = null;
 function loadImg(src) {
 return new Promise(res => { if (!src) return res(null); const im = new Image(); im.onload = () => res(im); im.onerror = () => res(null); im.src = src; });
 }
@@ -535,17 +549,3 @@ approveModal.show();
 }
 const apvItem = row => ({ product_id: Number(row.dataset.pid), no_hardener: !!row.dataset.nh,
 hardener_qty: row.dataset.hq === '' ? null : Number(row.dataset.hq) });
-function updateApproveRow(inp) {
-const row = inp.closest('.item-row');
-const qty = Number(row.dataset.qty), p = prodById(Number(row.dataset.pid));
-const rec = inp.value === '' ? NaN : parseFloat(inp.value);
-const diff = !isNaN(rec) && rec !== qty;
-row.querySelector('.apv-note').classList.toggle('d-none', !diff);
-inp.classList.toggle('border-warning', diff);
-if (!p) return;
-const after = r2(p.qty - (isNaN(rec) ? 0 : rec));
-row.querySelector('.apv-after').innerHTML =
-(!isNaN(rec) && tnkI(apvItem(row), rec) ? `<div class="text-primary">Gelen: ${tnkI(apvItem(row), rec)}</div>` : '') +
-`Kalan emanet stok: ${num(p.qty)} → <b class="${after < 0 ? 'text-danger' : 'text-success'}">${num(after)} L</b>` +
-(diff ? `<div class="diff">${rec < qty ? `${num(qty - rec)} L eksik` : `${num(rec - qty)} L fazla`}</div>` : '');
-}
