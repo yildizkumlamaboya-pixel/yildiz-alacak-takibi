@@ -186,10 +186,24 @@ const pid = i.product_id, pk = packOf(pid), h = hardOf(pid), hq = i.hardener_qty
 q = Number(q);
 if (!pk || !(q > 0)) return '';
 if (h > 0 && hq > 0) {
-const boya = Math.max(0, r2(q - hq)), t = num(r2(boya / pk));
-return `${t} teneke + ${num(r2(hq / h))} sertleştirici (${num(boya)} L boya + ${num(hq)} L sertl.)`;
+const boya = Math.max(0, r2(q - Math.min(hq, q)));
+return `${num(r2(boya / pk))} teneke + ${num(r2(Math.min(hq, q) / h))} sertleştirici`;
 }
-return `${num(r2(q / pk))} teneke${h > 0 ? ' (sertleştiricisiz)' : ''}`;
+return `${num(r2(q / pk))} teneke${h > 0 && hq === 0 ? ' (sertleştiricisiz)' : ''}`;
+}
+function qL(i, q) {
+q = Number(q);
+const hq = Number(i.hardener_qty) || 0;
+if (hq > 0 && hardOf(i.product_id) > 0 && q > 0) {
+const h = Math.min(hq, q);
+return `${num(r2(q - h))} L boya + ${num(h)} L sertleştirici`;
+}
+return `${num(q)} L`;
+}
+function totL(items) {
+let hq = 0, all = 0;
+items.forEach(i => { all += i.qty; if (Number(i.hardener_qty) > 0 && hardOf(i.product_id) > 0) hq += Math.min(Number(i.hardener_qty), i.qty); });
+return hq > 0 ? `${num(r2(all - hq))} L boya + ${num(r2(hq))} L sertleştirici` : `${num(r2(all))} L`;
 }
 const tnkSpanI = (i, q) => { const t = tnkI(i, q); return t ? ` <span class="tiny text-secondary fw-normal">(${t})</span>` : ''; };
 const tnkLineI = (i, q) => { const t = tnkI(i, q); return t ? `<div class="doc-lbl">${t}</div>` : ''; };
@@ -254,7 +268,7 @@ r.querySelector('.it-hq').placeholder = hasHard && b > 0 ? `öneri ${num(r2(b / 
 total += b + hq;
 const h = r.querySelector('.it-pack');
 if (h) h.textContent = !pk ? '' : (b > 0 || hq > 0)
-? `= ${num(r2(b / pk))} teneke${hasHard ? (hq > 0 ? ` + ${num(r2(hq / hl))} sertleştirici • toplam ${num(r2(b + hq))} L emanetten düşer` : ' (sertleştiricisiz)') : ''}`
+? `= ${num(r2(b / pk))} teneke${hasHard ? (hq > 0 ? ` + ${num(r2(hq / hl))} sertleştirici` : ' (sertleştiricisiz)') : ''}`
 : packTxt(pk, hl);
 if (pk) { anyPack = true; tk += b / pk; if (hasHard) hk += hq / hl; }
 });
@@ -515,6 +529,9 @@ if (/Oturum geçersiz/.test(res.error.message)) logout();
 return;
 }
 if (m && m.error && m.error.message) renderErrors.push('portal_meta: ' + m.error.message);
+const dd = res.data || {}, anyItem = [...(dd.orders || []), ...(dd.shipments || [])].map(x => (x.items || [])[0]).find(Boolean);
+if (isAdmin() && anyItem && !('hardener_qty' in anyItem))
+renderErrors.push("Sertleştirici litresi kaydedilemiyor: Supabase'de 11-sertlestirici-litre.sql dosyasını çalıştırın.");
 const r = res;
 META = m && !m.error && m.data ? { packs: m.data.packs || {}, hards: m.data.hards || {}, logos: m.data.logos || {} } : { packs: {}, hards: {}, logos: {} };
 const d = r.data || {};
@@ -552,43 +569,3 @@ console.error(fn.name, e);
 });
 showLoadError();
 }
-function renderHome() {
-const waiting = shipments.filter(isPending).length;
-const openOrders = orders.filter(o => orderState(o) === 'open').length;
-$('navOrderBadge').textContent = openOrders;
-$('navOrderBadge').classList.toggle('d-none', !openOrders);
-const orderLine = openOrders ? `<div class="tiny mt-1 clickable text-primary" onclick="switchTab('tabSiparis')"><i class="bi bi-clipboard-check"></i> ${openOrders} açık sipariş</div>` : '';
-if (!isAdmin()) {
-const left = r2(products.reduce((a, p) => a + Math.max(0, p.qty), 0));
-$('homeHero').innerHTML = `
-<div class="card hero p-3 mb-3 d-flex flex-row align-items-center gap-3">
-<div class="flex-shrink-0">${firmLogo(me.name, 56)}</div>
-<div class="flex-grow-1">
-<div class="fw-semibold">${esc(me.name)}</div>
-<div class="tiny text-secondary mb-1">Yıldız Kumlama Boya'ya teslim edilecek kalan</div>
-<div class="big">${num(left)} L</div>
-<div class="tiny text-secondary mt-1">${waiting ? `<span class="text-warning-emphasis"><i class="bi bi-hourglass-split"></i> ${waiting} sevkiyat onay bekliyor</span>` : 'Onay bekleyen sevkiyat yok'}</div>
-${orderLine}
-</div>
-</div>`;
-return;
-}
-const byBayi = {};
-products.forEach(p => { byBayi[p.allowed_bayi] = r2((byBayi[p.allowed_bayi] || 0) + Math.max(0, p.qty)); });
-const names = Object.keys(byBayi).sort(trCmp);
-const total = r2(names.reduce((a, n) => a + byBayi[n], 0));
-$('homeHero').innerHTML = !names.length ? '' : `
-<div class="card hero p-3 mb-3">
-<div class="d-flex justify-content-between align-items-end mb-2">
-<div><div class="tiny text-secondary">Toplam kalan emanet stok</div><div class="big">${num(total)} L</div></div>
-<div class="tiny text-secondary text-end">${waiting ? `<span class="text-warning-emphasis fw-semibold">${waiting} sevkiyat<br>onay bekliyor</span>` : 'Bekleyen sevkiyat yok'}${orderLine}</div>
-</div>
-<div class="d-flex flex-wrap gap-2">
-${names.map(n => `<div class="border rounded-3 bg-white px-2 py-1 d-flex align-items-center gap-2 clickable" onclick="switchTab('tabStok')">
-${firmLogo(n, 22)}<span class="small fw-semibold">${num(byBayi[n])} L</span></div>`).join('')}
-</div>
-</div>`;
-}
-const PAGE_SIZE = 20;
-const pages = { ship: 1, order: 1, moves: 1, audit: 1 };
-const PAGER_RENDER = { ship: () => renderShipments(), order: () => renderOrders(), moves: () => renderMovesList(), audit: () => renderAudit() };

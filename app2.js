@@ -1,3 +1,43 @@
+function renderHome() {
+const waiting = shipments.filter(isPending).length;
+const openOrders = orders.filter(o => orderState(o) === 'open').length;
+$('navOrderBadge').textContent = openOrders;
+$('navOrderBadge').classList.toggle('d-none', !openOrders);
+const orderLine = openOrders ? `<div class="tiny mt-1 clickable text-primary" onclick="switchTab('tabSiparis')"><i class="bi bi-clipboard-check"></i> ${openOrders} açık sipariş</div>` : '';
+if (!isAdmin()) {
+const left = r2(products.reduce((a, p) => a + Math.max(0, p.qty), 0));
+$('homeHero').innerHTML = `
+<div class="card hero p-3 mb-3 d-flex flex-row align-items-center gap-3">
+<div class="flex-shrink-0">${firmLogo(me.name, 56)}</div>
+<div class="flex-grow-1">
+<div class="fw-semibold">${esc(me.name)}</div>
+<div class="tiny text-secondary mb-1">Yıldız Kumlama Boya'ya teslim edilecek kalan</div>
+<div class="big">${num(left)} L</div>
+<div class="tiny text-secondary mt-1">${waiting ? `<span class="text-warning-emphasis"><i class="bi bi-hourglass-split"></i> ${waiting} sevkiyat onay bekliyor</span>` : 'Onay bekleyen sevkiyat yok'}</div>
+${orderLine}
+</div>
+</div>`;
+return;
+}
+const byBayi = {};
+products.forEach(p => { byBayi[p.allowed_bayi] = r2((byBayi[p.allowed_bayi] || 0) + Math.max(0, p.qty)); });
+const names = Object.keys(byBayi).sort(trCmp);
+const total = r2(names.reduce((a, n) => a + byBayi[n], 0));
+$('homeHero').innerHTML = !names.length ? '' : `
+<div class="card hero p-3 mb-3">
+<div class="d-flex justify-content-between align-items-end mb-2">
+<div><div class="tiny text-secondary">Toplam kalan emanet stok</div><div class="big">${num(total)} L</div></div>
+<div class="tiny text-secondary text-end">${waiting ? `<span class="text-warning-emphasis fw-semibold">${waiting} sevkiyat<br>onay bekliyor</span>` : 'Bekleyen sevkiyat yok'}${orderLine}</div>
+</div>
+<div class="d-flex flex-wrap gap-2">
+${names.map(n => `<div class="border rounded-3 bg-white px-2 py-1 d-flex align-items-center gap-2 clickable" onclick="switchTab('tabStok')">
+${firmLogo(n, 22)}<span class="small fw-semibold">${num(byBayi[n])} L</span></div>`).join('')}
+</div>
+</div>`;
+}
+const PAGE_SIZE = 20;
+const pages = { ship: 1, order: 1, moves: 1, audit: 1 };
+const PAGER_RENDER = { ship: () => renderShipments(), order: () => renderOrders(), moves: () => renderMovesList(), audit: () => renderAudit() };
 function pageSlice(list, key) {
 const total = Math.max(1, Math.ceil(list.length / PAGE_SIZE));
 pages[key] = Math.min(Math.max(1, pages[key]), total);
@@ -125,7 +165,7 @@ return `<div class="item-line">
 <span>${esc(i.product_name)}</span>
 <span class="text-nowrap ${diff ? 'diff fw-semibold' : 'fw-medium'}">${diff
 ? `${num(i.qty)} → ${num(i.received_qty)} L`
-: `${num(i.qty)} L`}${tnkSpanI(i, isPending(s) ? i.qty : i.received_qty)}</span>
+: qL(i, i.qty)}${tnkSpanI(i, isPending(s) ? i.qty : i.received_qty)}</span>
 </div>`;
 }).join('');
 }
@@ -222,7 +262,7 @@ const p = prodById(i.product_id) || {};
 const oi = o ? o.items.find(x => x.product_id === i.product_id) : null;
 const diff = o && (!oi || oi.qty !== i.qty);
 return `<tr><td>${esc(p.name)}</td>${o ? `<td class="text-end text-secondary">${oi ? num(oi.qty) + ' L' : '-'}</td>` : ''}
-<td class="text-end fw-bold ${diff ? 'diff' : ''}">${num(i.qty)} L${tnkLineI(i, i.qty)}</td></tr>`;
+<td class="text-end fw-bold ${diff ? 'diff' : ''}">${qL(i, i.qty)}${tnkLineI(i, i.qty)}</td></tr>`;
 }).join('')}
 ${o ? o.items.filter(oi => !items.some(i => i.product_id === oi.product_id)).map(oi =>
 `<tr><td>${esc(oi.product_name)}</td><td class="text-end text-secondary">${num(oi.qty)} L</td><td class="text-end diff">gönderilmiyor</td></tr>`).join('') : ''}
@@ -267,9 +307,9 @@ const lines = [`*SİPARİŞ ${orderNo(o)}*`, `Yıldız Kumlama Boya → ${o.bayi
 if (o.due_date) lines.push(`Termin: ${dOnly(o.due_date + 'T00:00:00')}`);
 if (st !== 'open') lines.push(`Durum: ${st === 'cancelled' ? 'İptal' : 'Sevkiyata dönüştü'}`);
 lines.push('');
-o.items.forEach(i => { const t = tnkI(i, i.qty); lines.push(`• ${i.product_name}: *${num(i.qty)} L*${t ? ` — ${t}` : ''}`); });
+o.items.forEach(i => { const t = tnkI(i, i.qty); lines.push(`• ${i.product_name}: *${qL(i, i.qty)}*${t ? ` — ${t}` : ''}`); });
 const total = r2(o.items.reduce((a, i) => a + i.qty, 0));
-if (o.items.length > 1) lines.push(`Toplam: ${num(total)} L`);
+if (o.items.length > 1) lines.push(`Toplam: ${totL(o.items)}`);
 if (o.note) lines.push('', `Not: ${o.note}`);
 return lines.join('\n');
 }
@@ -280,12 +320,14 @@ const st = orderState(o), total = r2(o.items.reduce((a, i) => a + i.qty, 0));
 ctx.font = F(600, 34);
 const rows = o.items.map(i => {
 ctx.font = F(600, 34); const name = wrapLines(ctx, i.product_name, W - 2 * P - 300);
-ctx.font = F(400, 26); const t = tnkI(i, i.qty), sub = t ? wrapLines(ctx, t, W - 2 * P - 40) : [];
+ctx.font = F(400, 26);
+const hqv = Number(i.hardener_qty) > 0 && hardOf(i.product_id) > 0 ? Math.min(Number(i.hardener_qty), i.qty) : 0;
+const t = [hqv ? `+ ${num(hqv)} L sertleştirici` : '', tnkI(i, i.qty)].filter(Boolean).join(' • '), sub = t ? wrapLines(ctx, t, W - 2 * P - 40) : [];
 return { i, name, sub, h: 34 + name.length * 44 + sub.length * 34 + 22 };
 });
 ctx.font = F(600, 30);
 const noteL = o.note ? wrapLines(ctx, 'Not: ' + o.note, W - 2 * P - 48) : [];
-const H = 230 + 250 + 70 + rows.reduce((a, r) => a + r.h, 0) + (o.items.length > 1 ? 80 : 0) + (noteL.length ? 70 + noteL.length * 40 : 0) + 120;
+const H = 230 + 250 + 70 + rows.reduce((a, r) => a + r.h, 0) + (o.items.length > 1 ? 130 : 0) + (noteL.length ? 70 + noteL.length * 40 : 0) + 120;
 c.width = W; c.height = H;
 ctx.fillStyle = '#ffffff'; ctx.fillRect(0, 0, W, H);
 ctx.fillStyle = '#111111'; ctx.fillRect(0, 0, W, 200);
@@ -322,7 +364,7 @@ rows.forEach(r => {
 let yy = y + 34;
 ctx.fillStyle = '#111111'; ctx.font = F(600, 34);
 r.name.forEach((l, k) => ctx.fillText(l, P, yy + k * 44));
-ctx.textAlign = 'right'; ctx.font = F(800, 40); ctx.fillText(`${num(r.i.qty)} L`, W - P, yy + 4); ctx.textAlign = 'left';
+ctx.textAlign = 'right'; ctx.font = F(800, 40); ctx.fillText(`${num(r.i.qty - (Number(r.i.hardener_qty) > 0 && hardOf(r.i.product_id) > 0 ? Math.min(Number(r.i.hardener_qty), r.i.qty) : 0))} L`, W - P, yy + 4); ctx.textAlign = 'left';
 yy += r.name.length * 44 - 6;
 ctx.fillStyle = '#b45309'; ctx.font = F(500, 26); r.sub.forEach((l, k) => ctx.fillText(l, P, yy + k * 34));
 y += r.h;
@@ -330,7 +372,10 @@ ctx.fillStyle = '#e5e7eb'; ctx.fillRect(P, y - 8, W - 2 * P, 2);
 });
 if (o.items.length > 1) {
 y += 50; ctx.fillStyle = '#111111'; ctx.font = F(800, 36); ctx.fillText('TOPLAM', P, y);
-ctx.textAlign = 'right'; ctx.fillText(`${num(total)} L`, W - P, y); ctx.textAlign = 'left'; y += 30;
+const tt = totL(o.items), tp = tt.split(' + ');
+ctx.textAlign = 'right'; ctx.fillText(tp[0], W - P, y);
+if (tp[1]) { ctx.font = F(600, 28); ctx.fillStyle = '#b45309'; ctx.fillText('+ ' + tp[1], W - P, y + 40); ctx.fillStyle = '#111111'; y += 40; }
+ctx.textAlign = 'left'; y += 30;
 }
 if (noteL.length) {
 y += 40; ctx.fillStyle = '#fff7d6'; ctx.fillRect(P, y, W - 2 * P, 40 + noteL.length * 40);
@@ -444,8 +489,8 @@ ${isAdmin() ? firmLogo(o.bayi, 20) + `<span class="badge text-bg-light border fw
 <div class="text-end">${orderBadge(o)}</div>
 </div>
 ${o.note ? `<div class="small mb-1"><i class="bi bi-chat-left-text text-secondary"></i> ${esc(o.note)}</div>` : ''}
-<div class="border-top pt-1">${o.items.map(i => `<div class="item-line"><span>${esc(i.product_name)}</span><span class="fw-medium text-nowrap">${num(i.qty)} L${tnkSpanI(i, i.qty)}</span></div>`).join('')}</div>
-${o.items.length > 1 ? `<div class="item-line border-top mt-1 pt-1 text-secondary"><span>Toplam</span><span>${num(total)} L</span></div>` : ''}
+<div class="border-top pt-1">${o.items.map(i => `<div class="item-line"><span>${esc(i.product_name)}</span><span class="fw-medium text-end">${qL(i, i.qty)}${tnkSpanI(i, i.qty)}</span></div>`).join('')}</div>
+${o.items.length > 1 ? `<div class="item-line border-top mt-1 pt-1 text-secondary"><span>Toplam</span><span class="text-end">${totL(o.items)}</span></div>` : ''}
 <div class="tiny text-primary mt-1"><i class="bi bi-eye"></i> Özeti görmek için dokunun</div>
 </div>
 ${st === 'converted' ? `<div class="tiny mt-2 clickable text-primary" onclick="openDetail(${o.shipment.id})"><i class="bi bi-truck"></i> Sevkiyat #${esc(o.shipment.irsaliye_no)} — detayı gör</div>` : ''}
@@ -503,64 +548,4 @@ $('ordEditDue').value = editingOrder.due_date || '';
 $('ordEditNote').value = editingOrder.note || '';
 itemEditor('ordEditItems', products.filter(p => p.allowed_bayi === editingOrder.bayi), editingOrder.items, false);
 orderModal.show();
-}
-async function saveOrderEdit() {
-const items = readItems('ordEditItems');
-if (!items) return;
-const r = await shipRpc('portal_order_update', { p_id: editingOrder.id, p_note: $('ordEditNote').value.trim(),
-p_due_date: $('ordEditDue').value || null, p_items: items });
-if (!r) return;
-orderModal.hide();
-notify('Sipariş güncellendi.');
-await loadData();
-}
-async function cancelOrder(id, cancel) {
-const o = orders.find(x => x.id === id);
-if (!o || !confirm(cancel ? `${orderNo(o)} iptal edilsin mi? Firma bu siparişi sevkiyata dönüştüremez.` : `${orderNo(o)} tekrar açılsın mı?`)) return;
-const r = await rpc('portal_order_cancel', { p_id: id, p_cancel: cancel });
-if (!r) return;
-notify(cancel ? 'Sipariş iptal edildi.' : 'Sipariş tekrar açıldı.');
-await loadData();
-}
-async function deleteOrder(id) {
-const o = orders.find(x => x.id === id);
-if (!o || !confirm(`${orderNo(o)} kalıcı olarak silinsin mi?`)) return;
-const r = await rpc('portal_order_delete', { p_id: id });
-if (!r) return;
-notify('Sipariş silindi.');
-await loadData();
-}
-function clearOrderLink() {
-if (!convertingOrder || !confirm(`${orderNo(convertingOrder)} bağlantısı kaldırılsın mı? Formdaki bilgiler korunur; sevkiyat siparişsiz bildirilir ve sipariş açık kalır.`)) return;
-convertingOrder = null;
-$('sevkOrderBanner').classList.add('d-none');
-}
-function convertOrder(id) {
-const o = orders.find(x => x.id === id);
-if (!o || orderState(o) !== 'open') return;
-switchTab('tabSevkEt');
-convertingOrder = o; pendingSevk = null;
-$('sevkNo').value = '';
-personPicker('sevkPerson', me.name, '');
-itemEditor('sevkItems', visibleProducts(), o.items.filter(i => prodById(i.product_id)).map(i => ({ product_id: i.product_id, qty: i.qty, hardener_qty: i.hardener_qty })), false);
-$('sevkOrderBanner').innerHTML = `
-<div class="d-flex justify-content-between align-items-start gap-2">
-<div><i class="bi bi-clipboard-check me-1"></i><b>${orderNo(o)}</b> siparişi sevkiyata dönüştürülüyor.
-<div class="tiny text-secondary">Ürünler siparişten dolduruldu; gerçekte gönderdiğiniz miktarı yazın.</div></div>
-<button class="btn btn-sm btn-link p-0 text-nowrap" onclick="clearOrderLink()">Bağlantıyı kaldır</button>
-</div>`;
-$('sevkOrderBanner').classList.remove('d-none');
-if (sevkPad) sevkPad.clear();
-window.scrollTo(0, 0);
-}
-function openEdit(id) {
-editing = shipments.find(s => s.id === id);
-if (!editing) return;
-const approved = !isPending(editing);
-$('editNo').value = editing.irsaliye_no;
-$('editSupplier').innerText = `Gönderen: ${editing.supplier}`;
-$('editWarn').classList.toggle('d-none', !approved);
-personPicker('editPerson', editing.supplier, editing.prepared_by || '');
-itemEditor('editItems', products.filter(p => p.allowed_bayi === editing.supplier), editing.items, approved && isAdmin());
-editModal.show();
 }

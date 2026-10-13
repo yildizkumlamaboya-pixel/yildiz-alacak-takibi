@@ -1,3 +1,58 @@
+function renderMovesList() {
+const typeBadge = MOVE_BADGE;
+$('repCount').innerText = `(${reportMoves.length})`;
+$('repMoves').innerHTML = !reportMoves.length
+? `<div class="text-center text-secondary small py-3">Bu aralıkta hareket yok.</div>`
+: pageSlice(reportMoves, 'moves').map(m => {
+const p = prodById(m.product_id) || { name: '(silinmiş kalem)' };
+const up = m.qty > 0;
+return `
+<div class="border-bottom py-2 d-flex justify-content-between gap-2">
+<div>
+<div class="small fw-semibold">${esc(p.name)}</div>
+<div class="d-flex flex-wrap align-items-center gap-1 mt-1">
+<span class="badge ${typeBadge[m.movement_type] || 'text-bg-light'} bg-opacity-75" style="font-size:.6rem">${esc(emn(m.movement_type))}</span>
+${isAdmin() && m.bayi ? `<span class="badge text-bg-light border" style="font-size:.6rem">${esc(m.bayi)}</span>` : ''}
+</div>
+<div class="tiny text-secondary mt-1">${dt(m.created_at)}${m.created_by ? ' • ' + esc(m.created_by) : ''}${m.note ? ' • ' + esc(emn(m.note)) : ''}</div>
+</div>
+<div class="text-end text-nowrap">
+<div class="fw-bold small ${up ? 'text-primary' : 'text-success'}">${up ? '+' : ''}${num(m.qty)} L</div>
+<div class="tiny text-secondary">Kalan: ${num(m.balance_after)}</div>
+</div>
+</div>`;
+}).join('');
+$('movesPager').innerHTML = pagerHtml(reportMoves.length, 'moves');
+}
+function exportCsv() {
+if (!reportMoves.length) return notify('Dışa aktarılacak hareket yok.', 'warning');
+const dec = v => String(v ?? '').replace('.', ',');
+const rows = [['Tarih', 'Firma', 'Ürün Kodu', 'Ürün', 'Hareket', 'Miktar (L)', 'Kalan Emanet Stok (L)', 'Açıklama', 'İşlemi Yapan']];
+reportMoves.forEach(m => {
+const p = prodById(m.product_id) || {};
+rows.push([dt(m.created_at), m.bayi || p.allowed_bayi, p.code, p.name, emn(m.movement_type), dec(m.qty), dec(m.balance_after), emn(m.note), m.created_by]);
+});
+const csv = '\uFEFF' + rows.map(r => r.map(v => `"${String(v ?? '').replace(/"/g, '""')}"`).join(';')).join('\r\n');
+download(csv, `emanet-stok-hareketleri_${$('repFrom').value}_${$('repTo').value}.csv`, 'text/csv;charset=utf-8');
+}
+function showDoc(html, title) {
+$('docPage').innerHTML = html;
+$('docView').classList.remove('d-none');
+$('docView').scrollTop = 0;
+document.title = title;
+}
+function closeDoc() {
+$('docView').classList.add('d-none');
+document.title = APP_TITLE;
+}
+const docHeader = (title, sub) => `
+<div class="d-flex justify-content-between align-items-start border-bottom border-2 border-dark pb-2 mb-3">
+<div>${LOGOS[ADMIN_FIRM] ? `<img src="${LOGOS[ADMIN_FIRM].src}" class="doc-logo" alt="Yıldız Kumlama &amp; Boya">` : '<h1>YILDIZ KUMLAMA BOYA</h1>'}
+<div class="doc-lbl mt-1">Emanet Stok Takibi</div></div>
+<div class="text-end"><div class="fw-bold" style="font-size:16px">${title}</div>${sub}</div>
+</div>`;
+const docFooter = () => `<div class="doc-lbl mt-4" style="font-size:10px">Bu belge Yıldız Kumlama Boya emanet stok takip sisteminden ${dt(new Date())} tarihinde oluşturulmuştur.</div>`;
+const docNo = s => `TES-${new Date(s.approved_at || s.created_at).getFullYear()}-${String(s.id).padStart(5, '0')}`;
 async function fetchDocData(ids) {
 const out = {};
 for (let i = 0; i < ids.length; i += 40) {
@@ -41,8 +96,8 @@ ${anyNote ? '<th style="width:22%">Açıklama</th>' : ''}
 <tbody>${s.items.map((i, k) => `
 <tr>
 <td>${k + 1}</td><td>${esc(i.code || '')}</td><td>${esc(i.product_name)}</td>
-<td class="text-end text-nowrap">${num(i.qty)} L${tnkLineI(i, i.qty)}</td>
-<td class="text-end text-nowrap fw-bold">${num(i.received_qty)} L${tnkLineI(i, i.received_qty)}</td>
+<td class="text-end">${qL(i, i.qty)}${tnkLineI(i, i.qty)}</td>
+<td class="text-end fw-bold">${qL(i, i.received_qty)}${tnkLineI(i, i.received_qty)}</td>
 ${anyNote ? `<td>${esc(i.note || (i.received_qty !== i.qty ? (i.received_qty < i.qty ? `${num(i.qty - i.received_qty)} L eksik` : `${num(i.received_qty - i.qty)} L fazla`) : ''))}</td>` : ''}
 </tr>`).join('')}
 </tbody>
@@ -449,69 +504,3 @@ ${b.note ? `<div class="tiny">${esc(b.note)}</div>` : ''}
 </div>`;
 }).join('');
 }
-async function createBackup() {
-const r = await rpc('portal_admin_backup_create', { p_note: $('backupNote').value });
-if (!r) return;
-$('backupNote').value = '';
-notify('Yedek alındı.');
-await loadBackups();
-}
-async function downloadBackup(id) {
-const r = await rpc('portal_admin_backup_get', { p_id: id });
-if (!r) return;
-const b = backups.find(x => x.id === id);
-const stamp = b ? new Date(b.created_at).toISOString().slice(0, 16).replace(/[:T]/g, '-') : id;
-download(JSON.stringify(r.data, null, 2), `yildiz-emanet-stok-yedek_${stamp}.json`, 'application/json');
-}
-const RESTORE_WARN = 'Mevcut tüm emanet stok kalemleri, sevkiyatlar ve hareketler bu yedekteki verilerle DEĞİŞTİRİLECEK.\n\nİşlemden önce mevcut durumun otomatik yedeği alınır.\nDevam edilsin mi?';
-async function restoreBackup(id) {
-if (!confirm(RESTORE_WARN)) return;
-const r = await rpc('portal_admin_backup_restore', { p_id: id });
-if (!r) return;
-notify('Yedek geri yüklendi.');
-await Promise.all([loadData(), loadBackups(), loadUsers()]);
-}
-async function restoreFromFile(input) {
-const file = input.files[0];
-input.value = '';
-if (!file) return;
-let data;
-try { data = JSON.parse(await file.text()); }
-catch { return notify('Dosya okunamadı, geçerli bir yedek değil.', 'danger'); }
-if (!Array.isArray(data.products) || !Array.isArray(data.shipments)) return notify('Geçersiz yedek dosyası.', 'danger');
-if (!confirm(`${file.name}\n${data.products.length} kalem, ${data.shipments.length} sevkiyat\n\n` + RESTORE_WARN)) return;
-const r = await rpc('portal_admin_backup_restore_json', { p_data: data });
-if (!r) return;
-notify('Yedek dosyası geri yüklendi.');
-await Promise.all([loadData(), loadBackups(), loadUsers()]);
-}
-async function deleteBackup(id) {
-if (!confirm('Bu yedek kalıcı olarak silinsin mi?')) return;
-const r = await rpc('portal_admin_backup_delete', { p_id: id });
-if (!r) return;
-notify('Yedek silindi.');
-await loadBackups();
-}
-if (LOGOS[ADMIN_FIRM]) { $('brandLogo').src = LOGOS[ADMIN_FIRM].src; $('loginLogo').src = LOGOS[ADMIN_FIRM].src; }
-if (DEMO) sb.ready.then(() => {
-if (!sb.persistent) $('loginSection').insertAdjacentHTML('afterbegin', `
-<div class="alert alert-danger small mb-3"><i class="bi bi-exclamation-triangle me-1"></i>
-Bu açılış şeklinde telefon hafızasına kayıt yapılamıyor; girdiğiniz bilgiler sayfa kapanınca silinir.
-Portalı internet adresinden (ör. Netlify) açın.</div>`);
-});
-if (DEMO && !location.protocol.startsWith('http')) $('loginSection').insertAdjacentHTML('afterbegin', `
-<div class="alert alert-warning small mb-3"><i class="bi bi-exclamation-triangle me-1"></i>
-Portal dosyadan açıldı. Bazı telefonlarda dosya her açılışta farklı adresle açılır ve önceki kayıtlar görünmez.
-Kayıtların kalıcı olması için portalı internet adresinden açıp "Ana ekrana ekle" yapın (KURULUM.txt).
-Bu arada Ayarlar &gt; Yedekleme'den düzenli yedek indirin.</div>`);
-const savedSession = sessionGet();
-if (savedSession) {
-$('loginSection').classList.add('d-none');
-$('bootLoading').classList.remove('d-none');
-login(savedSession).catch(() => {}).finally(() => {
-$('bootLoading').classList.add('d-none');
-if (!me) $('loginSection').classList.remove('d-none');
-});
-}
-fillLastUser();
-if ('serviceWorker' in navigator && location.protocol.startsWith('http')) navigator.serviceWorker.register('sw.js');

@@ -1,3 +1,63 @@
+async function saveOrderEdit() {
+const items = readItems('ordEditItems');
+if (!items) return;
+const r = await shipRpc('portal_order_update', { p_id: editingOrder.id, p_note: $('ordEditNote').value.trim(),
+p_due_date: $('ordEditDue').value || null, p_items: items });
+if (!r) return;
+orderModal.hide();
+notify('Sipariş güncellendi.');
+await loadData();
+}
+async function cancelOrder(id, cancel) {
+const o = orders.find(x => x.id === id);
+if (!o || !confirm(cancel ? `${orderNo(o)} iptal edilsin mi? Firma bu siparişi sevkiyata dönüştüremez.` : `${orderNo(o)} tekrar açılsın mı?`)) return;
+const r = await rpc('portal_order_cancel', { p_id: id, p_cancel: cancel });
+if (!r) return;
+notify(cancel ? 'Sipariş iptal edildi.' : 'Sipariş tekrar açıldı.');
+await loadData();
+}
+async function deleteOrder(id) {
+const o = orders.find(x => x.id === id);
+if (!o || !confirm(`${orderNo(o)} kalıcı olarak silinsin mi?`)) return;
+const r = await rpc('portal_order_delete', { p_id: id });
+if (!r) return;
+notify('Sipariş silindi.');
+await loadData();
+}
+function clearOrderLink() {
+if (!convertingOrder || !confirm(`${orderNo(convertingOrder)} bağlantısı kaldırılsın mı? Formdaki bilgiler korunur; sevkiyat siparişsiz bildirilir ve sipariş açık kalır.`)) return;
+convertingOrder = null;
+$('sevkOrderBanner').classList.add('d-none');
+}
+function convertOrder(id) {
+const o = orders.find(x => x.id === id);
+if (!o || orderState(o) !== 'open') return;
+switchTab('tabSevkEt');
+convertingOrder = o; pendingSevk = null;
+$('sevkNo').value = '';
+personPicker('sevkPerson', me.name, '');
+itemEditor('sevkItems', visibleProducts(), o.items.filter(i => prodById(i.product_id)).map(i => ({ product_id: i.product_id, qty: i.qty, hardener_qty: i.hardener_qty })), false);
+$('sevkOrderBanner').innerHTML = `
+<div class="d-flex justify-content-between align-items-start gap-2">
+<div><i class="bi bi-clipboard-check me-1"></i><b>${orderNo(o)}</b> siparişi sevkiyata dönüştürülüyor.
+<div class="tiny text-secondary">Ürünler siparişten dolduruldu; gerçekte gönderdiğiniz miktarı yazın.</div></div>
+<button class="btn btn-sm btn-link p-0 text-nowrap" onclick="clearOrderLink()">Bağlantıyı kaldır</button>
+</div>`;
+$('sevkOrderBanner').classList.remove('d-none');
+if (sevkPad) sevkPad.clear();
+window.scrollTo(0, 0);
+}
+function openEdit(id) {
+editing = shipments.find(s => s.id === id);
+if (!editing) return;
+const approved = !isPending(editing);
+$('editNo').value = editing.irsaliye_no;
+$('editSupplier').innerText = `Gönderen: ${editing.supplier}`;
+$('editWarn').classList.toggle('d-none', !approved);
+personPicker('editPerson', editing.supplier, editing.prepared_by || '');
+itemEditor('editItems', products.filter(p => p.allowed_bayi === editing.supplier), editing.items, approved && isAdmin());
+editModal.show();
+}
 async function saveEdit() {
 const no = $('editNo').value.trim();
 if (!no) return notify('İrsaliye numarasını giriniz.', 'warning');
@@ -47,8 +107,8 @@ ${row('Son Düzenleme', s.updated_at ? `${esc(s.updated_by)} • ${dt(s.updated_
 <tbody>${s.items.map(i => `
 <tr>
 <td>${esc(i.product_name)}${i.note ? `<div class="tiny diff">${esc(i.note)}</div>` : ''}</td>
-<td class="text-end text-nowrap">${num(i.qty)} L${tnkLineI(i, i.qty)}</td>
-${pending ? '' : `<td class="text-end text-nowrap fw-semibold ${i.received_qty !== i.qty ? 'diff' : ''}">${num(i.received_qty)} L${tnkLineI(i, i.received_qty)}</td>`}
+<td class="text-end">${qL(i, i.qty)}${tnkLineI(i, i.qty)}</td>
+${pending ? '' : `<td class="text-end fw-semibold ${i.received_qty !== i.qty ? 'diff' : ''}">${qL(i, i.received_qty)}${tnkLineI(i, i.received_qty)}</td>`}
 </tr>`).join('')}
 </tbody>
 </table>
@@ -107,7 +167,7 @@ $('apvItems').innerHTML = approving.items.map(i => `
 <div class="item-row" data-item="${i.id}" data-qty="${i.qty}" data-pid="${i.product_id}" data-nh="${i.no_hardener ? 1 : ''}" data-hq="${i.hardener_qty ?? ''}">
 <div class="d-flex justify-content-between gap-2">
 <span class="fw-semibold small">${esc(i.product_name)}</span>
-<span class="small text-nowrap">Bildirilen: <b>${num(i.qty)} L</b>${tnkSpanI(i, i.qty)}</span>
+<span class="small text-nowrap">Bildirilen: <b>${qL(i, i.qty)}</b>${tnkSpanI(i, i.qty)}</span>
 </div>
 <div class="row g-2 mt-1 align-items-end">
 <div class="col-5">
@@ -527,58 +587,3 @@ const MOVE_BADGE = {
 'Sevkiyat Teslimi': 'text-bg-success', 'Alacak Girişi': 'text-bg-primary', 'Açılış Alacağı': 'text-bg-info',
 'Alacak Düşümü': 'text-bg-danger', 'Düzeltme': 'text-bg-secondary', 'Onay İptali': 'text-bg-warning', 'Sevkiyat İptali': 'text-bg-warning'
 };
-function renderMovesList() {
-const typeBadge = MOVE_BADGE;
-$('repCount').innerText = `(${reportMoves.length})`;
-$('repMoves').innerHTML = !reportMoves.length
-? `<div class="text-center text-secondary small py-3">Bu aralıkta hareket yok.</div>`
-: pageSlice(reportMoves, 'moves').map(m => {
-const p = prodById(m.product_id) || { name: '(silinmiş kalem)' };
-const up = m.qty > 0;
-return `
-<div class="border-bottom py-2 d-flex justify-content-between gap-2">
-<div>
-<div class="small fw-semibold">${esc(p.name)}</div>
-<div class="d-flex flex-wrap align-items-center gap-1 mt-1">
-<span class="badge ${typeBadge[m.movement_type] || 'text-bg-light'} bg-opacity-75" style="font-size:.6rem">${esc(emn(m.movement_type))}</span>
-${isAdmin() && m.bayi ? `<span class="badge text-bg-light border" style="font-size:.6rem">${esc(m.bayi)}</span>` : ''}
-</div>
-<div class="tiny text-secondary mt-1">${dt(m.created_at)}${m.created_by ? ' • ' + esc(m.created_by) : ''}${m.note ? ' • ' + esc(emn(m.note)) : ''}</div>
-</div>
-<div class="text-end text-nowrap">
-<div class="fw-bold small ${up ? 'text-primary' : 'text-success'}">${up ? '+' : ''}${num(m.qty)} L</div>
-<div class="tiny text-secondary">Kalan: ${num(m.balance_after)}</div>
-</div>
-</div>`;
-}).join('');
-$('movesPager').innerHTML = pagerHtml(reportMoves.length, 'moves');
-}
-function exportCsv() {
-if (!reportMoves.length) return notify('Dışa aktarılacak hareket yok.', 'warning');
-const dec = v => String(v ?? '').replace('.', ',');
-const rows = [['Tarih', 'Firma', 'Ürün Kodu', 'Ürün', 'Hareket', 'Miktar (L)', 'Kalan Emanet Stok (L)', 'Açıklama', 'İşlemi Yapan']];
-reportMoves.forEach(m => {
-const p = prodById(m.product_id) || {};
-rows.push([dt(m.created_at), m.bayi || p.allowed_bayi, p.code, p.name, emn(m.movement_type), dec(m.qty), dec(m.balance_after), emn(m.note), m.created_by]);
-});
-const csv = '\uFEFF' + rows.map(r => r.map(v => `"${String(v ?? '').replace(/"/g, '""')}"`).join(';')).join('\r\n');
-download(csv, `emanet-stok-hareketleri_${$('repFrom').value}_${$('repTo').value}.csv`, 'text/csv;charset=utf-8');
-}
-function showDoc(html, title) {
-$('docPage').innerHTML = html;
-$('docView').classList.remove('d-none');
-$('docView').scrollTop = 0;
-document.title = title;
-}
-function closeDoc() {
-$('docView').classList.add('d-none');
-document.title = APP_TITLE;
-}
-const docHeader = (title, sub) => `
-<div class="d-flex justify-content-between align-items-start border-bottom border-2 border-dark pb-2 mb-3">
-<div>${LOGOS[ADMIN_FIRM] ? `<img src="${LOGOS[ADMIN_FIRM].src}" class="doc-logo" alt="Yıldız Kumlama &amp; Boya">` : '<h1>YILDIZ KUMLAMA BOYA</h1>'}
-<div class="doc-lbl mt-1">Emanet Stok Takibi</div></div>
-<div class="text-end"><div class="fw-bold" style="font-size:16px">${title}</div>${sub}</div>
-</div>`;
-const docFooter = () => `<div class="doc-lbl mt-4" style="font-size:10px">Bu belge Yıldız Kumlama Boya emanet stok takip sisteminden ${dt(new Date())} tarihinde oluşturulmuştur.</div>`;
-const docNo = s => `TES-${new Date(s.approved_at || s.created_at).getFullYear()}-${String(s.id).padStart(5, '0')}`;
