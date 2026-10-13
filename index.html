@@ -40,7 +40,9 @@ input, textarea { -webkit-user-select: text; user-select: text; }
 .low-card { border-color: #fde68a !important; background: #fffbeb; }
 .done-card { background: #f9fafb; }
 .clickable { cursor: pointer; }
+.seg3 { position: sticky; top: 62px; z-index: 5; box-shadow: 0 -10px 0 8px #f4f6f9, 0 4px 10px rgba(0,0,0,.04); border-radius: .5rem; }
 .seg3 .btn { font-size: .8rem; padding: .45rem .25rem; line-height: 1.2; }
+.seg3 .btn-outline-dark { background: #fff; }
 .seg3 .btn i { font-size: 1.05rem; margin-bottom: 2px; }
 .clickable:active { transform: scale(.995); }
 .item-row { border: 1px solid #e5e7eb; border-radius: 12px; padding: .6rem; margin-bottom: .5rem; background: #fafafa; }
@@ -233,9 +235,9 @@ main.container { max-width: 1120px !important; padding-left: 1.5rem; padding-rig
 </section>
 <section id="tabStok" class="d-none">
 <div class="btn-group w-100 mb-3 admin-only d-none seg3" role="group">
-<button id="fold-adj-btn" class="btn btn-outline-dark" onclick="fold('adj', $('fold-adj').classList.contains('d-none'))"><i class="bi bi-plus-slash-minus d-block"></i>Ekle / Düş</button>
-<button id="fold-kalem-btn" class="btn btn-outline-dark" onclick="fold('kalem', $('fold-kalem').classList.contains('d-none'))"><i class="bi bi-plus-square d-block"></i>Kalem Ekle</button>
-<button class="btn btn-outline-dark" onclick="switchTab('tabUrun')"><i class="bi bi-list-ul d-block"></i>Ürün Listesi</button>
+<button data-seg="adj" class="btn btn-outline-dark" onclick="stokAction('adj')"><i class="bi bi-plus-slash-minus d-block"></i>Ekle / Düş</button>
+<button data-seg="kalem" class="btn btn-outline-dark" onclick="stokAction('kalem')"><i class="bi bi-link-45deg d-block"></i>Firmaya Ürün Ata</button>
+<button data-seg="urun" class="btn btn-outline-dark" onclick="stokAction('urun')"><i class="bi bi-list-ul d-block"></i>Ürün Listesi</button>
 </div>
 <div class="mb-2 px-1">
 <div class="section-title" id="stockTitle">Kalan Emanet Stoklar</div>
@@ -260,7 +262,7 @@ main.container { max-width: 1120px !important; padding-left: 1.5rem; padding-rig
 </div>
 <div class="card p-3 mb-3 d-none" id="fold-kalem">
 <div class="d-flex justify-content-between align-items-center mb-3">
-<span class="section-title"><i class="bi bi-plus-square me-1"></i>Firmaya Emanet Stok Kalemi Ekle</span>
+<span class="section-title"><i class="bi bi-link-45deg me-1"></i>Firmaya Ürün Ata</span>
 <button type="button" class="btn-close" onclick="fold('kalem', false)"></button>
 </div>
 <label class="small-label">Firma</label>
@@ -278,7 +280,7 @@ main.container { max-width: 1120px !important; padding-left: 1.5rem; padding-rig
 </div>
 </div>
 <div class="form-text mb-3">Başlangıç emanet stoğu: bu firmadan şu an teslim almayı beklediğiniz miktar. Uyarı: kalan bu miktarın altına inince kalem sarı görünür (0 = uyarı yok).</div>
-<button onclick="busy(this, addNewProduct)" class="btn btn-dark w-100"><i class="bi bi-plus-lg me-1"></i>Kalemi Kaydet</button>
+<button onclick="busy(this, addNewProduct)" class="btn btn-dark w-100"><i class="bi bi-link-45deg me-1"></i>Ürünü Firmaya Ata</button>
 </div>
 <div id="stockList" class="mb-2"></div>
 <div id="stockPager" class="mb-4"></div>
@@ -346,6 +348,11 @@ main.container { max-width: 1120px !important; padding-left: 1.5rem; padding-rig
 <div id="orderPager"></div>
 </section>
 <section id="tabUrun" class="d-none">
+<div class="btn-group w-100 mb-3 admin-only d-none seg3" role="group">
+<button data-seg="adj" class="btn btn-outline-dark" onclick="stokAction('adj')"><i class="bi bi-plus-slash-minus d-block"></i>Ekle / Düş</button>
+<button data-seg="kalem" class="btn btn-outline-dark" onclick="stokAction('kalem')"><i class="bi bi-link-45deg d-block"></i>Firmaya Ürün Ata</button>
+<button data-seg="urun" class="btn btn-outline-dark" onclick="stokAction('urun')"><i class="bi bi-list-ul d-block"></i>Ürün Listesi</button>
+</div>
 <button id="fold-urun-btn" class="btn btn-dark w-100 mb-3 py-2" onclick="fold('urun', true)"><i class="bi bi-plus-lg me-1"></i>Yeni Ürün</button>
 <div class="card p-3 mb-3 d-none" id="fold-urun">
 <div class="d-flex justify-content-between align-items-center mb-3">

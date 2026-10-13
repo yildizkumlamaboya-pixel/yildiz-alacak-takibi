@@ -112,7 +112,7 @@ p_critical: parseFloat($('newCritical').value) || 0, p_opening: parseFloat($('ne
 });
 if (!r) return;
 ['newOpening', 'newCritical'].forEach(id => $(id).value = '');
-notify('Emanet stok kalemi eklendi.');
+notify('Ürün firmaya atandı.');
 fold('kalem', false);
 await loadData();
 }

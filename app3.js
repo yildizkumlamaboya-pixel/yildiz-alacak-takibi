@@ -275,13 +275,25 @@ if (!isAdmin()) return;
 const bayi = $('ordBayi').value;
 itemEditor('ordItems', products.filter(p => p.allowed_bayi === bayi), [], false);
 }
+function stokAction(k) {
+if (k === 'urun') { fold('adj', false); fold('kalem', false); switchTab('tabUrun'); return; }
+if (currentTab !== 'tabStok') { switchTab('tabStok'); fold(k, true); return; }
+fold(k, $('fold-' + k).classList.contains('d-none'));
+}
+function updateSeg() {
+document.querySelectorAll('[data-seg]').forEach(b => {
+const k = b.dataset.seg;
+const on = k === 'urun' ? currentTab === 'tabUrun' : currentTab === 'tabStok' && !$('fold-' + k).classList.contains('d-none');
+b.classList.toggle('btn-dark', on); b.classList.toggle('btn-outline-dark', !on);
+});
+}
 function fold(key, open) {
 const card = $('fold-' + key), btn = $('fold-' + key + '-btn');
 if (!card) return;
 if (open && (key === 'adj' || key === 'kalem')) fold(key === 'adj' ? 'kalem' : 'adj', false);
 card.classList.toggle('d-none', !open);
 if (btn) btn.classList.toggle('active', !!open);
-if (open) card.scrollIntoView({ behavior: 'smooth', block: 'start' });
+updateSeg();
 }
 function toggleOrderForm(open) {
 if (open && !isAdmin()) return;

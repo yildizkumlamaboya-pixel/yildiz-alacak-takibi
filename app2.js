@@ -201,6 +201,7 @@ const b = $('btn-' + id);
 if (b) b.classList.toggle('active', id === navId);
 });
 $('settingsBtn').classList.toggle('active', tabId === 'tabAyarlar');
+updateSeg();
 if (tabId === 'tabRapor') loadReport();
 if (tabId === 'tabSevkEt' && !isAdmin()) sevkPad = preparePad($('sevkSigCanvas'), sevkPad);
 if (tabId === 'tabAyarlar' && isAdmin()) { loadUsers(); loadBackups(); loadAudit(); }
