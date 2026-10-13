@@ -1,3 +1,25 @@
+async function confirmApproval() {
+const items = [];
+for (const row of $('apvItems').querySelectorAll('.item-row')) {
+const v = row.querySelector('.apv-rec').value;
+const rec = parseFloat(v);
+if (v === '' || !(rec >= 0)) return notify('Gelen miktarları kontrol edin (0 veya daha büyük olmalı).', 'warning');
+items.push({ item_id: Number(row.dataset.item), received_qty: rec, note: row.querySelector('.apv-note').value.trim(), qty: Number(row.dataset.qty) });
+}
+const noNote = items.filter(i => i.received_qty !== i.qty && !i.note);
+if (noNote.length && !confirm('Bildirilenden farklı gelen ürün(ler) için açıklama yazmadınız. Yine de devam edilsin mi?')) return;
+const person = readPerson('apvPerson');
+if (!person) return notify('Teslim alan kişiyi seçin veya yazın.', 'warning');
+if (!signaturePad || signaturePad.isEmpty()) return notify('Lütfen ekrana imzalayınız.', 'warning');
+const r = await rpc('portal_approve_shipment', {
+p_id: approving.id, p_signature: signaturePad.toDataURL('image/png'), p_received_by: person,
+p_note: $('apvNote').value.trim(), p_items: items.map(({ qty, ...x }) => x)
+});
+if (!r) return;
+approveModal.hide();
+notify('Teslim alındı, emanet stoktan düşüldü.');
+await loadData();
+}
 function renderStock() {
 const list = visibleProducts();
 if (!list.length) {

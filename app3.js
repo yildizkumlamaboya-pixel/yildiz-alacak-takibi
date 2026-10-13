@@ -1,3 +1,16 @@
+function loadImg(src) {
+return new Promise(res => { if (!src) return res(null); const im = new Image(); im.onload = () => res(im); im.onerror = () => res(null); im.src = src; });
+}
+function wrapLines(ctx, text, maxW) {
+const words = String(text || '').split(/\s+/), out = [];
+let line = '';
+words.forEach(w => {
+const t = line ? line + ' ' + w : w;
+if (ctx.measureText(t).width > maxW && line) { out.push(line); line = w; } else line = t;
+});
+if (line) out.push(line);
+return out.length ? out : [''];
+}
 function orderShareText(o) {
 const st = orderState(o);
 const lines = [`*SİPARİŞ ${orderNo(o)}*`, `Yıldız Kumlama Boya → ${o.bayi}`, `Tarih: ${dt(o.created_at)}`];
@@ -535,26 +548,4 @@ row.querySelector('.apv-after').innerHTML =
 (!isNaN(rec) && tnkI(apvItem(row), rec) ? `<div class="text-primary">Gelen: ${tnkI(apvItem(row), rec)}</div>` : '') +
 `Kalan emanet stok: ${num(p.qty)} → <b class="${after < 0 ? 'text-danger' : 'text-success'}">${num(after)} L</b>` +
 (diff ? `<div class="diff">${rec < qty ? `${num(qty - rec)} L eksik` : `${num(rec - qty)} L fazla`}</div>` : '');
-}
-async function confirmApproval() {
-const items = [];
-for (const row of $('apvItems').querySelectorAll('.item-row')) {
-const v = row.querySelector('.apv-rec').value;
-const rec = parseFloat(v);
-if (v === '' || !(rec >= 0)) return notify('Gelen miktarları kontrol edin (0 veya daha büyük olmalı).', 'warning');
-items.push({ item_id: Number(row.dataset.item), received_qty: rec, note: row.querySelector('.apv-note').value.trim(), qty: Number(row.dataset.qty) });
-}
-const noNote = items.filter(i => i.received_qty !== i.qty && !i.note);
-if (noNote.length && !confirm('Bildirilenden farklı gelen ürün(ler) için açıklama yazmadınız. Yine de devam edilsin mi?')) return;
-const person = readPerson('apvPerson');
-if (!person) return notify('Teslim alan kişiyi seçin veya yazın.', 'warning');
-if (!signaturePad || signaturePad.isEmpty()) return notify('Lütfen ekrana imzalayınız.', 'warning');
-const r = await rpc('portal_approve_shipment', {
-p_id: approving.id, p_signature: signaturePad.toDataURL('image/png'), p_received_by: person,
-p_note: $('apvNote').value.trim(), p_items: items.map(({ qty, ...x }) => x)
-});
-if (!r) return;
-approveModal.hide();
-notify('Teslim alındı, emanet stoktan düşüldü.');
-await loadData();
 }

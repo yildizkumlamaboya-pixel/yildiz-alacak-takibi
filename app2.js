@@ -263,7 +263,6 @@ const today = ymd(new Date()), soon = ymd(new Date(Date.now() + 3 * 864e5));
 const pend = shipments.filter(isPending);
 const open = orders.filter(isOrderOpen);
 const dueList = open.filter(o => o.due_date && o.due_date <= soon).sort((a, b) => a.due_date.localeCompare(b.due_date));
-const crit = products.filter(p => p.critical > 0 && p.qty <= p.critical);
 const card = (icon, cls, title, count, body, onclick) => `
 <div class="card p-3 ${onclick ? 'clickable' : ''}" ${onclick ? `onclick="${onclick}"` : ''}>
 <div class="d-flex justify-content-between align-items-center">
@@ -284,9 +283,15 @@ open.slice(0, 5).map(o => { const pr = orderProgress(o); return line(`${isAdmin(
 if (dueList.length) parts.push(card('bi-calendar-event', 'text-danger', 'Termini geçen / yaklaşan', dueList.length,
 dueList.slice(0, 5).map(o => line(`${isAdmin() ? esc(o.bayi) + ' • ' : ''}${orderNo(o)}`, dOnly(o.due_date + 'T00:00:00') + (o.due_date < today ? ' (gecikti)' : ''), o.due_date < today ? 'text-danger fw-semibold' : '')).join(''),
 "switchTab('tabSiparis'); setOrderFilter('open')"));
-if (isAdmin()) parts.push(card('bi-exclamation-triangle', 'text-danger', 'Kritik seviyedeki emanet stoklar', crit.length,
-crit.length ? crit.slice(0, 6).map(p => line(`${esc(p.allowed_bayi)} • ${esc(p.name)}`, `${num(p.qty)} L`, 'text-danger fw-semibold')).join('') : '<div class="tiny text-secondary">Kritik seviyede kalem yok.</div>',
-"switchTab('tabStok')"));
+const done = shipments.filter(s => !isPending(s) && s.approved_at).sort((a, b) => String(b.approved_at).localeCompare(String(a.approved_at)));
+const now = new Date(), monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+const doneMonth = done.filter(s => new Date(s.approved_at) >= monthStart);
+const monthL = r2(doneMonth.reduce((a, s) => a + shipRecv(s), 0));
+parts.push(card('bi-check-circle', 'text-success', isAdmin() ? 'Başarılı teslimatlar (bu ay)' : 'Teslim alınan sevkiyatlarım (bu ay)', doneMonth.length,
+(doneMonth.length ? `<div class="tiny text-success fw-semibold mb-1">Bu ay toplam ${num(monthL)} L teslim alındı</div>` : '')
++ (done.length ? done.slice(0, 5).map(s => line(`${isAdmin() ? esc(s.supplier) + ' • ' : ''}#${esc(s.irsaliye_no)} <span class="tiny text-secondary">${dOnly(s.approved_at)}</span>`, `${num(shipRecv(s))} L`, 'text-success fw-semibold')).join('')
+: '<div class="tiny text-secondary">Henüz teslim alınmış sevkiyat yok.</div>'),
+"switchTab('tabOnay'); setShipFilter('approved')"));
 $('homeCards').innerHTML = parts.join('');
 }
 const PAGE_SIZE = 20;
@@ -543,16 +548,3 @@ navStack = [];
 switchTab('tabOnay', true);
 }
 let shareData = null;
-function loadImg(src) {
-return new Promise(res => { if (!src) return res(null); const im = new Image(); im.onload = () => res(im); im.onerror = () => res(null); im.src = src; });
-}
-function wrapLines(ctx, text, maxW) {
-const words = String(text || '').split(/\s+/), out = [];
-let line = '';
-words.forEach(w => {
-const t = line ? line + ' ' + w : w;
-if (ctx.measureText(t).width > maxW && line) { out.push(line); line = w; } else line = t;
-});
-if (line) out.push(line);
-return out.length ? out : [''];
-}
