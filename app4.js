@@ -55,7 +55,7 @@ return `
 <div>
 <div class="tiny text-secondary">Kalan</div>
 <div class="fw-bold ${st.txt}">${num(p.qty)} L</div>
-${tnk(p.id, p.qty) ? `<div class="tiny text-secondary text-nowrap">≈ ${tnk(p.id, p.qty)}</div>` : ''}
+${tnk(p.id, p.qty) ? `<div class="tiny text-secondary text-nowrap">≈ ${tnk(p.id, p.qty).replace(' + ', '<br>+ ')}</div>` : ''}
 ${st.badge}
 </div>
 ${isAdmin() ? `<button class="btn btn-sm btn-light border" title="Düzenle" onclick="event.stopPropagation(); openProductEdit(${p.id})"><i class="bi bi-pencil"></i></button>` : ''}

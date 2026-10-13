@@ -188,9 +188,8 @@ const d = v => v ? new Date(v).toLocaleString('tr-TR') : '';
 const prodOf = id => prodById(id) || {};
 const sheets = [];
 const sheet = (rows, widths) => ({ rows, widths });
-const tnkN = (pid, q) => packOf(pid) ? Math.round(q / packOf(pid) * 100) / 100 : '';
-const stock = [['Firma', 'Ürün Kodu', 'Ürün', 'Kalan (L)', 'Teneke (≈)', 'Teneke L', 'Sertleştirici L', 'Uyarı Seviyesi (L)']];
-sortProducts(visibleProducts()).forEach(p => stock.push([p.allowed_bayi, p.code, p.name, n(p.qty), tnkN(p.id, p.qty), packOf(p.id) || '', hardOf(p.id) ?? '', n(p.critical) || '']));
+const stock = [['Firma', 'Ürün Kodu', 'Ürün', 'Kalan (L)', 'Teneke / Set (≈)', 'Teneke L', 'Sertleştirici L', 'Uyarı Seviyesi (L)']];
+sortProducts(visibleProducts()).forEach(p => stock.push([p.allowed_bayi, p.code, p.name, n(p.qty), tnkN(p.id, p.qty) || '', packOf(p.id) || '', hardOf(p.id) ?? '', n(p.critical) || '']));
 sheets.push({ name: 'Emanet Stok', ...sheet(stock, [20, 12, 36, 12, 11, 10, 14, 16]) });
 const sh = [['Bildirim Tarihi', 'Firma', 'İrsaliye No', 'Sipariş No', 'Durum', 'Düzenleyen', 'Teslim Alan', 'Teslim Tarihi', 'Ürün Kodu', 'Ürün',
 'Bildirilen Toplam (L)', 'Boya (L)', 'Sertleştirici (L)', 'Gelen (L)', 'Teneke', 'Not']];
@@ -297,10 +296,11 @@ function packTxt(pk, h) {
 if (!(pk > 0)) return '';
 return h > 0 ? `${num(pk)} L teneke + ${num(h)} L sertleştirici` : h === 0 ? `${num(pk)} L teneke, sertleştiricisiz` : `${num(pk)} L teneke`;
 }
+const tnkN = (pid, qty) => { const st = setOf(pid), q = Number(qty); return packOf(pid) && q > 0 ? r2(q / st) : 0; };
 function tnk(pid, qty) {
-const pk = packOf(pid), q = Number(qty);
-if (!pk || !(q > 0)) return '';
-return `${num(r2(q / pk))} teneke`;
+const n = tnkN(pid, qty);
+if (!n) return '';
+return hardOf(pid) > 0 ? `${num(n)} teneke + ${num(n)} sertleştirici` : `${num(n)} teneke`;
 }
 const tnkSpan = (pid, qty, nh) => { const t = tnk(pid, qty, nh); return t ? ` <span class="tiny text-secondary fw-normal">(${t})</span>` : ''; };
 const tnkLine = (pid, qty, nh) => { const t = tnk(pid, qty, nh); return t ? `<div class="doc-lbl">${t}</div>` : ''; };
