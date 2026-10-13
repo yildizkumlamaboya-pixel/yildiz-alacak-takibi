@@ -134,6 +134,9 @@ main.container { max-width: 1120px !important; padding-left: 1.5rem; padding-rig
 <span id="userRoleTitle">Emanet Stok Takibi</span>
 </div>
 </div>
+<button onclick="switchTab('tabAyarlar')" id="settingsBtn" class="btn btn-sm btn-outline-secondary d-none" title="Ayarlar">
+<i class="bi bi-gear"></i>
+</button>
 <button onclick="logout()" id="logoutBtn" class="btn btn-sm btn-outline-secondary d-none" title="Çıkış">
 <i class="bi bi-box-arrow-right"></i>
 </button>
@@ -176,8 +179,12 @@ main.container { max-width: 1120px !important; padding-left: 1.5rem; padding-rig
 </div>
 </div>
 </div>
-<section id="tabOnay">
+<section id="tabAna">
 <div id="homeHero"></div>
+<div id="homeCards" class="vstack gap-2"></div>
+</section>
+<section id="tabOnay" class="d-none">
+<button id="sevkNewBtn" class="btn btn-dark w-100 mb-3 py-2 d-none" onclick="switchTab('tabSevkEt')"><i class="bi bi-send me-1"></i>Sevkiyat Bildir</button>
 <div id="pendingAlert"></div>
 <div class="d-flex justify-content-between align-items-center mb-2 px-1">
 <span class="section-title">Sevkiyat & Teslimat</span>
@@ -227,9 +234,18 @@ main.container { max-width: 1120px !important; padding-left: 1.5rem; padding-rig
 <span class="section-title" id="stockTitle">Kalan Emanet Stoklar</span>
 <span class="text-secondary tiny">Kaleme dokunun → hareketler</span>
 </div>
-<div id="stockList" class="mb-4"></div>
-<div class="card p-3 mb-3 admin-only d-none">
-<div class="section-title mb-3"><i class="bi bi-plus-slash-minus me-1"></i>Emanet Stok Ekle / Düş</div>
+<div class="admin-only d-none">
+<div class="d-flex gap-2 mb-2">
+<button id="fold-adj-btn" class="btn btn-dark flex-fill" onclick="fold('adj', true)"><i class="bi bi-plus-slash-minus me-1"></i>Emanet Ekle / Düş</button>
+<button id="fold-kalem-btn" class="btn btn-outline-dark flex-fill" onclick="fold('kalem', true)"><i class="bi bi-plus-square me-1"></i>Firmaya Kalem Ekle</button>
+</div>
+<button class="btn btn-sm btn-light border w-100 mb-3" onclick="switchTab('tabUrun')"><i class="bi bi-list-ul me-1"></i>Ürün Listesi (teneke / sertleştirici ayarları)</button>
+</div>
+<div class="card p-3 mb-3 d-none" id="fold-adj">
+<div class="d-flex justify-content-between align-items-center mb-3">
+<span class="section-title"><i class="bi bi-plus-slash-minus me-1"></i>Emanet Stok Ekle / Düş</span>
+<button type="button" class="btn-close" onclick="fold('adj', false)"></button>
+</div>
 <select id="adjProduct" class="form-select mb-2"></select>
 <div class="btn-group w-100 mb-2" role="group">
 <input type="radio" class="btn-check" name="adjType" id="adjAdd" value="1" checked>
@@ -242,8 +258,11 @@ main.container { max-width: 1120px !important; padding-left: 1.5rem; padding-rig
 <div class="form-text mb-3">Firmadan yeni alım yaptığınızda <b>Emanet Stok Ekle</b>. Sevkiyatları teslim aldığınızda emanet stok kendiliğinden düşer.</div>
 <button onclick="busy(this, processAdjust)" class="btn btn-dark w-100">Kaydet</button>
 </div>
-<div class="card p-3 admin-only d-none">
-<div class="section-title mb-3"><i class="bi bi-plus-square me-1"></i>Firmaya Emanet Stok Kalemi Ekle</div>
+<div class="card p-3 mb-3 d-none" id="fold-kalem">
+<div class="d-flex justify-content-between align-items-center mb-3">
+<span class="section-title"><i class="bi bi-plus-square me-1"></i>Firmaya Emanet Stok Kalemi Ekle</span>
+<button type="button" class="btn-close" onclick="fold('kalem', false)"></button>
+</div>
 <label class="small-label">Firma</label>
 <select id="newAllowedBayi" class="form-select mb-2" onchange="fillNewCatalog()"></select>
 <label class="small-label">Ürün <span class="text-secondary">(Ürünler listesinden)</span></label>
@@ -261,6 +280,7 @@ main.container { max-width: 1120px !important; padding-left: 1.5rem; padding-rig
 <div class="form-text mb-3">Başlangıç emanet stoğu: bu firmadan şu an teslim almayı beklediğiniz miktar. Uyarı: kalan bu miktarın altına inince kalem sarı görünür (0 = uyarı yok).</div>
 <button onclick="busy(this, addNewProduct)" class="btn btn-dark w-100"><i class="bi bi-plus-lg me-1"></i>Kalemi Kaydet</button>
 </div>
+<div id="stockList" class="mb-4"></div>
 </section>
 <section id="tabSevkEt" class="d-none">
 <div class="card p-3">
@@ -314,9 +334,10 @@ main.container { max-width: 1120px !important; padding-left: 1.5rem; padding-rig
 <span class="section-title" id="orderTitle">Siparişler</span>
 <span class="badge text-bg-light border" id="orderCount"></span>
 </div>
+<input id="orderSearch" class="form-control mb-2" placeholder="Ara: sipariş no, ürün, firma, not" oninput="pages.order = 1; renderOrders()">
 <div class="btn-group w-100 mb-3" id="orderFilterGroup">
 <button class="btn btn-sm btn-outline-dark active" data-f="open" onclick="setOrderFilter('open')">Açık</button>
-<button class="btn btn-sm btn-outline-dark" data-f="converted" onclick="setOrderFilter('converted')">Sevkiyata Dönen</button>
+<button class="btn btn-sm btn-outline-dark" data-f="converted" onclick="setOrderFilter('converted')">Tamamlanan</button>
 <button class="btn btn-sm btn-outline-dark" data-f="cancelled" onclick="setOrderFilter('cancelled')">İptal</button>
 <button class="btn btn-sm btn-outline-dark" data-f="all" onclick="setOrderFilter('all')">Tümü</button>
 </div>
@@ -324,8 +345,12 @@ main.container { max-width: 1120px !important; padding-left: 1.5rem; padding-rig
 <div id="orderPager"></div>
 </section>
 <section id="tabUrun" class="d-none">
-<div class="card p-3 mb-3">
-<div class="section-title mb-3"><i class="bi bi-plus-circle me-1"></i>Yeni Ürün</div>
+<button id="fold-urun-btn" class="btn btn-dark w-100 mb-3 py-2" onclick="fold('urun', true)"><i class="bi bi-plus-lg me-1"></i>Yeni Ürün</button>
+<div class="card p-3 mb-3 d-none" id="fold-urun">
+<div class="d-flex justify-content-between align-items-center mb-3">
+<span class="section-title"><i class="bi bi-plus-circle me-1"></i>Yeni Ürün</span>
+<button type="button" class="btn-close" onclick="fold('urun', false)"></button>
+</div>
 <div class="row g-2 mb-1">
 <div class="col-4">
 <label class="small-label">Kod</label>
@@ -483,13 +508,11 @@ main.container { max-width: 1120px !important; padding-left: 1.5rem; padding-rig
 </main>
 <nav id="bottomNav" class="bottom-nav d-none">
 <div class="d-flex mx-auto" style="max-width:600px">
-<button id="btn-tabOnay" class="active" onclick="switchTab('tabOnay')"><i class="bi bi-truck"></i>Sevkiyat</button>
+<button id="btn-tabAna" class="active" onclick="switchTab('tabAna')"><i class="bi bi-house"></i>Ana Sayfa</button>
+<button id="btn-tabOnay" onclick="switchTab('tabOnay')"><i class="bi bi-truck"></i>Sevkiyat<span id="navShipBadge" class="nav-badge d-none"></span></button>
 <button id="btn-tabSiparis" onclick="switchTab('tabSiparis')"><i class="bi bi-clipboard-check"></i>Sipariş<span id="navOrderBadge" class="nav-badge d-none"></span></button>
 <button id="btn-tabStok" onclick="switchTab('tabStok')"><i class="bi bi-wallet2"></i><span id="navStokLabel">Emanet</span></button>
-<button id="btn-tabSevkEt" class="d-none" onclick="switchTab('tabSevkEt')"><i class="bi bi-send"></i>Sevk Bildir</button>
-<button id="btn-tabUrun" class="d-none" onclick="switchTab('tabUrun')"><i class="bi bi-list-ul"></i>Ürünler</button>
 <button id="btn-tabRapor" onclick="switchTab('tabRapor')"><i class="bi bi-bar-chart"></i>Rapor</button>
-<button id="btn-tabAyarlar" onclick="switchTab('tabAyarlar')"><i class="bi bi-gear"></i>Ayarlar</button>
 </div>
 </nav>
 <div class="modal fade" id="approveModal" tabindex="-1">

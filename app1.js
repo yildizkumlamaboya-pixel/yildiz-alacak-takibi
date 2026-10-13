@@ -20,8 +20,9 @@ let shipFilter = 'all', editing = null, approving = null, signaturePad = null, s
 let bayiEditingNew = false, editingProduct = null, editingCat = null;
 let META = { packs: {}, hards: {}, logos: {} };
 let channel = null, reloadTimer = null;
-let currentTab = 'tabOnay', navStack = [], exitTimer = null;
-const TABS = ['tabOnay', 'tabSiparis', 'tabStok', 'tabSevkEt', 'tabUrun', 'tabRapor', 'tabAyarlar'];
+let currentTab = 'tabAna', navStack = [], exitTimer = null;
+const TABS = ['tabAna', 'tabOnay', 'tabSiparis', 'tabStok', 'tabSevkEt', 'tabUrun', 'tabRapor', 'tabAyarlar'];
+const TAB_PARENT = { tabSevkEt: 'tabOnay', tabUrun: 'tabStok' };
 const approveModal = new bootstrap.Modal('#approveModal');
 const editModal = new bootstrap.Modal('#editModal');
 const detailModal = new bootstrap.Modal('#detailModal');
@@ -331,13 +332,13 @@ $('bootLoading').classList.add('d-none');
 $('appSection').classList.remove('d-none');
 $('bottomNav').classList.remove('d-none');
 $('logoutBtn').classList.remove('d-none');
+$('settingsBtn').classList.remove('d-none');
 $('liveDot').classList.remove('d-none');
 $('userFirm').innerText = isAdmin() ? 'Yönetici' : me.name;
 $('userRoleTitle').innerText = isAdmin() ? 'Emanet Stok Takibi' : 'Emanet Stok Takibi';
 document.querySelectorAll('.admin-only').forEach(el => el.classList.toggle('d-none', !isAdmin()));
-$('btn-tabSevkEt').classList.toggle('d-none', isAdmin());
-$('btn-tabUrun').classList.toggle('d-none', !isAdmin());
-$('navStokLabel').innerText = isAdmin() ? 'Emanet' : 'Kalan';
+$('sevkNewBtn').classList.toggle('d-none', isAdmin());
+$('navStokLabel').innerText = 'Emanet';
 $('orderTitle').innerText = isAdmin() ? 'Verilen Siparişler' : 'Yıldız Kumlama Boya Siparişleri';
 $('stockTitle').innerText = isAdmin() ? 'Kalan Emanet Stoklar' : 'Teslim Edilecek Kalan';
 setRange('month', false);
@@ -349,8 +350,8 @@ initRealtime();
 try { await loadData(); } catch (e) { reportError('loadData', e); }
 if (isAdmin()) { try { await loadUsers(); } catch (e) { reportError('loadUsers', e); } }
 resetSevkForm();
-navStack = []; currentTab = 'tabOnay';
-switchTab('tabOnay', true);
+navStack = []; currentTab = 'tabAna';
+switchTab('tabAna', true);
 armBackGuard();
 pushOn = false; updatePushUi();
 pushEnable(false);
@@ -361,7 +362,8 @@ $('pushAsk').classList.add('d-none');
 $('ordFormCard').classList.add('d-none'); $('ordOpenBtn').classList.remove('d-none');
 sessionSet(null);
 me = null; myPass = null;
-navStack = []; currentTab = 'tabOnay'; clearTimeout(exitTimer);
+navStack = []; currentTab = 'tabAna'; clearTimeout(exitTimer);
+['adj', 'kalem', 'urun'].forEach(k => fold(k, false));
 catalog = []; products = []; shipments = []; personnel = []; users = []; backups = []; reportMoves = []; orders = [];
 convertingOrder = null; pendingSevk = null;
 closeDoc();
@@ -373,6 +375,7 @@ $('appSection').classList.add('d-none');
 setTimeout(fillLastUser, 0);
 $('bottomNav').classList.add('d-none');
 $('logoutBtn').classList.add('d-none');
+$('settingsBtn').classList.add('d-none');
 $('liveDot').classList.add('d-none');
 $('userFirm').innerText = '';
 $('userRoleTitle').innerText = 'Emanet Stok Takibi';
@@ -476,9 +479,9 @@ if (open) { const m = bootstrap.Modal.getInstance(open); if (m) m.hide(); return
 if (!$('docView').classList.contains('d-none')) { closeDoc(); return true; }
 let prev = navStack.pop();
 while (prev && prev === currentTab) prev = navStack.pop();
-if (!prev && currentTab !== 'tabOnay') prev = 'tabOnay';
+if (!prev && currentTab !== 'tabAna') prev = 'tabAna';
 if (!prev) return false;
-if ($('btn-' + prev).classList.contains('d-none')) prev = 'tabOnay';
+if (!TABS.includes(prev) || (prev === 'tabSevkEt' && isAdmin()) || (prev === 'tabUrun' && !isAdmin())) prev = 'tabAna';
 switchTab(prev, true);
 return true;
 }
@@ -549,23 +552,15 @@ navStack.push(currentTab);
 if (navStack.length > 20) navStack.shift();
 }
 currentTab = tabId;
+const navId = TAB_PARENT[tabId] || tabId;
 TABS.forEach(id => {
 $(id).classList.toggle('d-none', id !== tabId);
-$('btn-' + id).classList.toggle('active', id === tabId);
+const b = $('btn-' + id);
+if (b) b.classList.toggle('active', id === navId);
 });
+$('settingsBtn').classList.toggle('active', tabId === 'tabAyarlar');
 if (tabId === 'tabRapor') loadReport();
 if (tabId === 'tabSevkEt' && !isAdmin()) sevkPad = preparePad($('sevkSigCanvas'), sevkPad);
 if (tabId === 'tabAyarlar' && isAdmin()) { loadUsers(); loadBackups(); loadAudit(); }
 window.scrollTo(0, 0);
-}
-function render() {
-if (!me) return;
-[renderHome, renderShipments, renderStock, renderCatalog, renderPersonnel, renderOrders, fillSelects].forEach(fn => {
-try { fn(); } catch (e) {
-const msg = `${fn.name}: ${e && e.message || e}`;
-if (!renderErrors.includes(msg)) renderErrors.push(msg);
-console.error(fn.name, e);
-}
-});
-showLoadError();
 }
