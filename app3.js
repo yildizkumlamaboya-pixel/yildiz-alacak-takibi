@@ -1,3 +1,10 @@
+function shareText() {
+if (!shareData) return;
+window.open('https://wa.me/?text=' + encodeURIComponent(shareData.text), '_blank');
+}
+const orderNo = o => `SIP-${new Date(o.created_at).getFullYear()}-${String(o.id).padStart(4, '0')}`;
+const orderNoById = id => { const o = orders.find(x => x.id === id); return o ? orderNo(o) : `SIP-${String(id).padStart(4, '0')}`; };
+const orderShips = o => shipments.filter(s => s.order_id === o.id);
 function orderProgress(o) {
 const ships = orderShips(o), sent = {}, sentH = {};
 ships.forEach(s => s.items.forEach(i => {
@@ -367,13 +374,17 @@ if (!list.length) {
 $('stockList').innerHTML = `<div class="card p-4 text-center text-secondary small">${isAdmin()
 ? 'Henüz emanet stok kalemi yok. Önce Ürünler ekranından ürün ekleyin, sonra aşağıdan firmaya atayın.'
 : 'Size tanımlı emanet stok kalemi yok.'}</div>`;
+$('stockPager').innerHTML = '';
 return;
 }
+const sorted = sortProducts(list), firmTotal = {};
+sorted.forEach(p => { firmTotal[p.allowed_bayi] = r2((firmTotal[p.allowed_bayi] || 0) + p.qty); });
 const groups = {};
-sortProducts(list).forEach(p => (groups[p.allowed_bayi] = groups[p.allowed_bayi] || []).push(p));
+pageSlice(sorted, 'stock').forEach(p => (groups[p.allowed_bayi] = groups[p.allowed_bayi] || []).push(p));
+$('stockPager').innerHTML = pagerHtml(sorted.length, 'stock');
 $('stockList').innerHTML = Object.keys(groups).map(b => {
 const items = groups[b];
-const total = r2(items.reduce((a, p) => a + p.qty, 0));
+const total = firmTotal[b];
 return `
 <div class="mb-3">
 ${isAdmin() ? `<div class="d-flex align-items-center gap-2 mb-2 px-1">
@@ -489,9 +500,10 @@ const q = $('catSearch').value.trim().toLocaleLowerCase('tr');
 const list = catalog.slice().sort((a, b) => trCmp(a.name, b.name))
 .filter(c => !q || `${c.code} ${c.name}`.toLocaleLowerCase('tr').includes(q));
 $('catCount').innerText = `${catalog.length} ürün`;
+$('catPager').innerHTML = pagerHtml(list.length, 'cat');
 $('catalogList').innerHTML = !list.length
 ? `<div class="card p-4 text-center text-secondary small">${catalog.length ? 'Aramaya uyan ürün yok.' : 'Henüz ürün yok. Yukarıdan ekleyin.'}</div>`
-: list.map(c => {
+: pageSlice(list, 'cat').map(c => {
 const used = products.filter(p => p.catalog_id === c.id);
 return `
 <div class="card p-3 d-flex flex-row justify-content-between align-items-center">
@@ -555,20 +567,4 @@ $('catEditUsage').innerText = used.length
 ? `Kullanan firmalar: ${used.join(', ')}. Yeni ad tüm emanet stok kalemlerine ve sevkiyatlara yansır.`
 : 'Bu ürün henüz bir firmaya atanmadı.';
 catModal.show();
-}
-async function saveCatEdit() {
-const code = $('catEditCode').value.trim(), name = $('catEditName').value.trim();
-if (!code || !name) return notify('Ürün kodu ve adı zorunlu.', 'warning');
-const pack = parseFloat($('catEditPack').value);
-if ($('catEditPack').value !== '' && !(pack > 0)) return notify('Teneke litresi geçersiz.', 'warning');
-const hard = readHard('catEditHard', 'catEditNoHard', pack);
-if (hard === undefined) return;
-const params = { p_id: editingCat.id, p_code: code, p_name: name };
-if (pack > 0 || editingCat.pack_size) params.p_pack = pack > 0 ? pack : null;
-if (hard !== null || editingCat.hardener_size != null) params.p_hard = hard;
-const r = await rpc('portal_catalog_update', params);
-if (!r) return;
-catModal.hide();
-notify('Ürün güncellendi.');
-await loadData();
 }

@@ -105,10 +105,14 @@ async function loadBackups() {
 const r = await rpc('portal_admin_backup_list');
 if (!r) return;
 backups = r.data || [];
+renderBackups();
+}
+function renderBackups() {
 const kindLabel = { 'manuel': ['Manuel', 'text-bg-dark'], 'otomatik': ['Otomatik', 'text-bg-info'], 'geri-yukleme-oncesi': ['Geri yükleme öncesi', 'text-bg-warning'] };
+$('backupPager').innerHTML = pagerHtml(backups.length, 'backup');
 $('backupList').innerHTML = !backups.length
 ? `<div class="text-secondary small text-center py-2">Henüz yedek yok.</div>`
-: backups.map(b => {
+: pageSlice(backups, 'backup').map(b => {
 const [lbl, cls] = kindLabel[b.kind] || [b.kind, 'text-bg-light'];
 return `
 <div class="border rounded-3 p-2 ps-3">

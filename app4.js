@@ -1,3 +1,19 @@
+async function saveCatEdit() {
+const code = $('catEditCode').value.trim(), name = $('catEditName').value.trim();
+if (!code || !name) return notify('Ürün kodu ve adı zorunlu.', 'warning');
+const pack = parseFloat($('catEditPack').value);
+if ($('catEditPack').value !== '' && !(pack > 0)) return notify('Teneke litresi geçersiz.', 'warning');
+const hard = readHard('catEditHard', 'catEditNoHard', pack);
+if (hard === undefined) return;
+const params = { p_id: editingCat.id, p_code: code, p_name: name };
+if (pack > 0 || editingCat.pack_size) params.p_pack = pack > 0 ? pack : null;
+if (hard !== null || editingCat.hardener_size != null) params.p_hard = hard;
+const r = await rpc('portal_catalog_update', params);
+if (!r) return;
+catModal.hide();
+notify('Ürün güncellendi.');
+await loadData();
+}
 async function deleteCatalog(id, fromModal) {
 const c = catalog.find(x => x.id === id);
 if (!c || !confirm(`"${c.name}" ürün listesinden silinsin mi?`)) return;
@@ -11,9 +27,10 @@ function renderPersonnel() {
 if (!isAdmin()) return;
 const firm = $('perFirm').value || me.name;
 const list = personnel.filter(x => x.firm === firm).sort((a, b) => trCmp(a.name, b.name));
+$('perPager').innerHTML = pagerHtml(list.length, 'per');
 $('perList').innerHTML = !list.length
 ? `<div class="text-secondary small text-center py-2">Bu firma için kayıtlı personel yok.</div>`
-: list.map(x => `
+: pageSlice(list, 'per').map(x => `
 <div class="border rounded-3 px-3 py-2 d-flex justify-content-between align-items-center">
 <span class="small">${esc(x.name)}</span>
 <button class="btn btn-sm btn-outline-danger" title="Sil" onclick="busy(this, () => deletePersonnel(${x.id}))"><i class="bi bi-trash"></i></button>

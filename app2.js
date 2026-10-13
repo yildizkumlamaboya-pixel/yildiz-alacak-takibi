@@ -84,8 +84,9 @@ crit.length ? crit.slice(0, 6).map(p => line(`${esc(p.allowed_bayi)} • ${esc(p
 $('homeCards').innerHTML = parts.join('');
 }
 const PAGE_SIZE = 20;
-const pages = { ship: 1, order: 1, moves: 1, audit: 1 };
-const PAGER_RENDER = { ship: () => renderShipments(), order: () => renderOrders(), moves: () => renderMovesList(), audit: () => renderAudit() };
+const pages = { ship: 1, order: 1, moves: 1, audit: 1, stock: 1, cat: 1, per: 1, backup: 1 };
+const PAGER_RENDER = { ship: () => renderShipments(), order: () => renderOrders(), moves: () => renderMovesList(), audit: () => renderAudit(),
+stock: () => renderStock(), cat: () => renderCatalog(), per: () => renderPersonnel(), backup: () => renderBackups() };
 function pageSlice(list, key) {
 const total = Math.max(1, Math.ceil(list.length / PAGE_SIZE));
 pages[key] = Math.min(Math.max(1, pages[key]), total);
@@ -113,7 +114,7 @@ ${html}
 function goPage(key, n) {
 pages[key] = n;
 PAGER_RENDER[key]();
-const el = $({ ship: 'shipmentList', order: 'orderList', moves: 'repMoves', audit: 'auditList' }[key]);
+const el = $({ ship: 'shipmentList', order: 'orderList', moves: 'repMoves', audit: 'auditList', stock: 'stockList', cat: 'catalogList', per: 'perList', backup: 'backupList' }[key]);
 if (el) window.scrollTo({ top: Math.max(0, el.getBoundingClientRect().top + window.scrollY - 140), behavior: 'smooth' });
 }
 function setShipFilter(f) {
@@ -526,10 +527,3 @@ return;
 const a = document.createElement('a'); a.href = URL.createObjectURL(shareData.blob); a.download = shareData.name;
 document.body.appendChild(a); a.click(); setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 1000);
 }
-function shareText() {
-if (!shareData) return;
-window.open('https://wa.me/?text=' + encodeURIComponent(shareData.text), '_blank');
-}
-const orderNo = o => `SIP-${new Date(o.created_at).getFullYear()}-${String(o.id).padStart(4, '0')}`;
-const orderNoById = id => { const o = orders.find(x => x.id === id); return o ? orderNo(o) : `SIP-${String(id).padStart(4, '0')}`; };
-const orderShips = o => shipments.filter(s => s.order_id === o.id);

@@ -280,7 +280,8 @@ main.container { max-width: 1120px !important; padding-left: 1.5rem; padding-rig
 <div class="form-text mb-3">Başlangıç emanet stoğu: bu firmadan şu an teslim almayı beklediğiniz miktar. Uyarı: kalan bu miktarın altına inince kalem sarı görünür (0 = uyarı yok).</div>
 <button onclick="busy(this, addNewProduct)" class="btn btn-dark w-100"><i class="bi bi-plus-lg me-1"></i>Kalemi Kaydet</button>
 </div>
-<div id="stockList" class="mb-4"></div>
+<div id="stockList" class="mb-2"></div>
+<div id="stockPager" class="mb-4"></div>
 </section>
 <section id="tabSevkEt" class="d-none">
 <div class="card p-3">
@@ -382,8 +383,9 @@ main.container { max-width: 1120px !important; padding-left: 1.5rem; padding-rig
 <span class="section-title">Ürün Listesi</span>
 <span class="badge text-bg-light border" id="catCount"></span>
 </div>
-<input id="catSearch" class="form-control mb-2" placeholder="Ara: kod veya ürün adı" oninput="renderCatalog()">
+<input id="catSearch" class="form-control mb-2" placeholder="Ara: kod veya ürün adı" oninput="pages.cat = 1; renderCatalog()">
 <div id="catalogList" class="vstack gap-2"></div>
+<div id="catPager"></div>
 </section>
 <section id="tabRapor" class="d-none">
 <div class="card p-3 mb-3">
@@ -469,12 +471,13 @@ main.container { max-width: 1120px !important; padding-left: 1.5rem; padding-rig
 <div class="card p-3 mb-3 admin-only d-none">
 <div class="section-title mb-2"><i class="bi bi-person-badge me-1"></i>Personel Listesi</div>
 <p class="text-secondary small mb-2">Firma personeli "İrsaliyeyi Düzenleyen", sizin personeliniz "Teslim Alan" seçiminde listelenir. Listede olmayan kişi adını elle de yazabilir.</p>
-<select id="perFirm" class="form-select mb-2" onchange="renderPersonnel()"></select>
+<select id="perFirm" class="form-select mb-2" onchange="pages.per = 1; renderPersonnel()"></select>
 <div class="input-group mb-2">
 <input id="perName" class="form-control" placeholder="Ad Soyad" onkeydown="if(event.key==='Enter')$('perAddBtn').click()">
 <button id="perAddBtn" class="btn btn-dark" onclick="busy(this, addPersonnel)"><i class="bi bi-plus-lg"></i> Ekle</button>
 </div>
 <div id="perList" class="vstack gap-1"></div>
+<div id="perPager"></div>
 </div>
 <div class="card p-3 mb-3 admin-only d-none">
 <div class="d-flex justify-content-between align-items-center mb-2">
@@ -502,6 +505,7 @@ main.container { max-width: 1120px !important; padding-left: 1.5rem; padding-rig
 <input type="file" accept=".json,application/json" hidden onchange="restoreFromFile(this)">
 </label>
 <div id="backupList" class="vstack gap-2"></div>
+<div id="backupPager"></div>
 </div>
 </section>
 </div>
