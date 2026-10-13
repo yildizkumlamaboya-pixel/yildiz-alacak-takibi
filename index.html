@@ -532,6 +532,20 @@ main.container { max-width: 1120px !important; padding-left: 1.5rem; padding-rig
 <div id="backupList" class="vstack gap-2"></div>
 <div id="backupPager"></div>
 </div>
+<div class="card p-3 mb-3 admin-only d-none border-danger">
+<div class="section-title mb-2 text-danger"><i class="bi bi-exclamation-octagon me-1"></i>Tüm Verileri Sil</div>
+<div class="small mb-2"><b class="text-danger">Silinir:</b> tüm sevkiyatlar, siparişler, emanet kalemleri ve bakiyeleri, tüm hareketler, işlem geçmişi ve yedekler.</div>
+<div class="small mb-3"><b class="text-success">Kalır:</b> firma hesapları, kullanıcı adları ve şifreler, logolar, telefonlar, personel.</div>
+<div class="alert alert-danger small py-2 mb-3"><i class="bi bi-exclamation-triangle me-1"></i>Bu işlem <b>geri alınamaz</b>. Yedekler de silindiği için silmeden önce Excel yedeği indirmeniz önerilir.</div>
+<button class="btn btn-outline-success w-100 mb-3" onclick="busy(this, exportExcel)"><i class="bi bi-download me-1"></i>Önce Excel Yedeği İndir</button>
+<div class="form-check mb-2">
+<input class="form-check-input" type="checkbox" id="wipeCatalog">
+<label class="form-check-label small" for="wipeCatalog">Ürün listesini de sil (teneke / sertleştirici ayarlarıyla)</label>
+</div>
+<label class="small-label">Silme Şifresi</label>
+<input type="password" id="wipeCode" class="form-control mb-3" inputmode="numeric" autocomplete="off" placeholder="••••">
+<button class="btn btn-danger w-100" onclick="busy(this, wipeAll)"><i class="bi bi-trash3 me-1"></i>Tüm Verileri Sil</button>
+</div>
 </section>
 </div>
 </main>

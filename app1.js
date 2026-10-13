@@ -123,6 +123,21 @@ setTimeout(() => URL.revokeObjectURL(a.href), 3000);
 function loadScript(src) {
 return new Promise((res, rej) => { const s = document.createElement('script'); s.src = src; s.onload = res; s.onerror = rej; document.head.appendChild(s); });
 }
+async function wipeAll() {
+const code = $('wipeCode').value.trim(), withCat = $('wipeCatalog').checked;
+if (!code) return notify('Silme şifresini giriniz.', 'warning');
+if (!confirm(`TÜM VERİLER SİLİNECEK:\n\n• ${shipments.length} sevkiyat, ${orders.length} sipariş\n• ${products.length} emanet kalemi ve tüm hareketler\n• İşlem geçmişi ve tüm yedekler${withCat ? `\n• Ürün listesi (${catalog.length} ürün)` : ''}\n\nBu işlem GERİ ALINAMAZ. Devam edilsin mi?`)) return;
+const { data, error } = await sb.rpc('portal_admin_wipe', { p_user: me.name, p_pass: myPass, p_code: code, p_catalog: withCat });
+if (error) {
+return notify(/portal_admin_wipe|function|schema cache/i.test(error.message)
+? "Bu özellik için Supabase'de 14-tum-verileri-sil.sql çalıştırılmalı." : error.message, 'danger');
+}
+$('wipeCode').value = ''; $('wipeCatalog').checked = false;
+const c = data || {};
+notify(`Tüm veriler silindi: ${c.sevkiyat || 0} sevkiyat, ${c.siparis || 0} sipariş, ${c.hareket || 0} hareket, ${c.yedek || 0} yedek.`);
+await loadData();
+try { await loadUsers(); await loadBackups(); await loadAudit(); } catch (e) { /* yoksay */ }
+}
 const CRC_T = (() => { const t = new Uint32Array(256); for (let n = 0; n < 256; n++) { let c = n; for (let k = 0; k < 8; k++) c = c & 1 ? 0xEDB88320 ^ (c >>> 1) : c >>> 1; t[n] = c >>> 0; } return t; })();
 function crc32(b) { let c = 0xFFFFFFFF; for (let i = 0; i < b.length; i++) c = CRC_T[(c ^ b[i]) & 0xFF] ^ (c >>> 8); return (c ^ 0xFFFFFFFF) >>> 0; }
 function zipStore(files) {

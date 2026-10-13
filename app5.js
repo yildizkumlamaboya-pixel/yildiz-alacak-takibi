@@ -265,6 +265,8 @@ if (c.pass_changed) return { icon: 'bi-key', cls: 'text-warning-emphasis', text:
 return c.active && c.active[1]
 ? { icon: 'bi-person-check', cls: 'text-success', text: `Firmayı aktif yaptı: ${r.name}` }
 : { icon: 'bi-person-slash', cls: 'text-danger', text: `Firmayı pasif yaptı: ${r.name}` };
+case 'system':
+return { icon: 'bi-trash3', cls: 'text-danger', text: `Tüm verileri sildi (${r.sevkiyat || 0} sevkiyat, ${r.siparis || 0} sipariş, ${r.hareket || 0} hareket, ${r.yedek || 0} yedek${r.urun != null ? `, ${r.urun} ürün` : ''})` };
 case 'backups':
 return a.op === 'RESTORE'
 ? { icon: 'bi-arrow-counterclockwise', cls: 'text-danger', text: 'Yedekten geri yükleme yaptı' }
