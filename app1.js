@@ -461,7 +461,7 @@ $('userFirm').innerText = isAdmin() ? 'Yönetici' : me.name;
 $('userRoleTitle').innerText = isAdmin() ? 'Emanet Stok Takibi' : 'Emanet Stok Takibi';
 document.querySelectorAll('.admin-only').forEach(el => el.classList.toggle('d-none', !isAdmin()));
 $('sevkNewBtn').classList.toggle('d-none', isAdmin());
-$('navStokLabel').innerText = 'Emanet';
+$('navStokLabel').innerText = 'Depo';
 $('orderTitle').innerText = isAdmin() ? 'Verilen Siparişler' : 'Yıldız Kumlama Boya Siparişleri';
 $('stockTitle').innerText = isAdmin() ? 'Kalan Emanet Stoklar' : 'Teslim Edilecek Kalan';
 setRange('month', false);
