@@ -1,10 +1,3 @@
-function shareText() {
-if (!shareData) return;
-window.open('https://wa.me/?text=' + encodeURIComponent(shareData.text), '_blank');
-}
-const orderNo = o => `SIP-${new Date(o.created_at).getFullYear()}-${String(o.id).padStart(4, '0')}`;
-const orderNoById = id => { const o = orders.find(x => x.id === id); return o ? orderNo(o) : `SIP-${String(id).padStart(4, '0')}`; };
-const orderShips = o => shipments.filter(s => s.order_id === o.id);
 function orderProgress(o) {
 const ships = orderShips(o), sent = {}, sentH = {};
 ships.forEach(s => s.items.forEach(i => {
@@ -403,7 +396,7 @@ return `
 <div>
 <div class="tiny text-secondary">Kalan</div>
 <div class="fw-bold ${st.txt}">${num(p.qty)} L</div>
-${tnk(p.id, p.qty) ? `<div class="tiny text-secondary">≈ ${tnk(p.id, p.qty)}</div>` : ''}
+${tnk(p.id, p.qty) ? `<div class="tiny text-secondary text-nowrap">≈ ${tnk(p.id, p.qty)}</div>` : ''}
 ${st.badge}
 </div>
 ${isAdmin() ? `<button class="btn btn-sm btn-light border" title="Düzenle" onclick="event.stopPropagation(); openProductEdit(${p.id})"><i class="bi bi-pencil"></i></button>` : ''}

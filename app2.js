@@ -63,10 +63,7 @@ const card = (icon, cls, title, count, body, onclick) => `
 </div>${body ? `<div class="mt-2">${body}</div>` : ''}</div>`;
 const line = (l, r, extra = '') => `<div class="item-line small"><span>${l}</span><span class="text-nowrap ${extra}">${r}</span></div>`;
 const quick = isAdmin() ? `
-<div class="d-flex gap-2 flex-wrap">
-<button class="btn btn-dark flex-fill" onclick="switchTab('tabSiparis'); toggleOrderForm(true)"><i class="bi bi-plus-lg me-1"></i>Yeni Sipariş</button>
-<button class="btn btn-outline-dark flex-fill" onclick="switchTab('tabStok'); fold('adj', true)"><i class="bi bi-plus-slash-minus me-1"></i>Emanet Ekle/Düş</button>
-</div>` : `
+<button class="btn btn-dark w-100" onclick="switchTab('tabSiparis'); toggleOrderForm(true)"><i class="bi bi-plus-lg me-1"></i>Yeni Sipariş</button>` : `
 <button class="btn btn-dark w-100" onclick="switchTab('tabSevkEt')"><i class="bi bi-send me-1"></i>Sevkiyat Bildir</button>`;
 const parts = [quick];
 parts.push(card('bi-hourglass-split', 'text-warning', isAdmin() ? 'Onay bekleyen sevkiyatlar' : 'Onay bekleyen sevkiyatlarım', pend.length,
@@ -527,3 +524,10 @@ return;
 const a = document.createElement('a'); a.href = URL.createObjectURL(shareData.blob); a.download = shareData.name;
 document.body.appendChild(a); a.click(); setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 1000);
 }
+function shareText() {
+if (!shareData) return;
+window.open('https://wa.me/?text=' + encodeURIComponent(shareData.text), '_blank');
+}
+const orderNo = o => `SIP-${new Date(o.created_at).getFullYear()}-${String(o.id).padStart(4, '0')}`;
+const orderNoById = id => { const o = orders.find(x => x.id === id); return o ? orderNo(o) : `SIP-${String(id).padStart(4, '0')}`; };
+const orderShips = o => shipments.filter(s => s.order_id === o.id);
