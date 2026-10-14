@@ -122,6 +122,9 @@
           <div class="section-title" id="shipFormTitle">Yeni sevkiyat</div>
           <button class="btn btn-sm btn-light border" onclick="closeShipForm()"><i class="bi bi-x-lg"></i></button>
         </div>
+        <input id="irsFile" type="file" accept="image/*" class="d-none" onchange="irsaliyeSecildi(this)">
+        <button class="btn btn-outline-primary w-100 mb-2" onclick="$('irsFile').click()"><i class="bi bi-camera me-1"></i>İrsaliye Fotoğrafından Doldur</button>
+        <div id="irsBox" class="d-none mb-2"></div>
         <div class="row g-2 mb-2">
           <div class="col-12 col-sm-6">
             <label class="small-label req">Firma</label>
@@ -232,6 +235,15 @@
         <div class="input-group">
           <input id="newFirm" class="form-control" placeholder="Yeni firma adı">
           <button class="btn btn-dark" onclick="saveFirm(null)"><i class="bi bi-plus-lg"></i> Ekle</button>
+        </div>
+      </div>
+      <div class="card p-3 mb-3">
+        <div class="section-title mb-2">İrsaliye okuma (Google Gemini)</div>
+        <div id="aiState" class="tiny mb-2"></div>
+        <div class="tiny text-secondary mb-2">Ücretsiz anahtar almak için <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener">aistudio.google.com/apikey</a> adresinde Google hesabınızla giriş yapıp <b>Create API key</b> deyin, çıkan anahtarı buraya yapıştırın.</div>
+        <div class="input-group">
+          <input id="aiKey" type="password" class="form-control" placeholder="AIza..." autocomplete="off">
+          <button class="btn btn-dark" onclick="saveAiKey()">Kaydet</button>
         </div>
       </div>
       <div class="card p-3 mb-3">

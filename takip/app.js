@@ -9,6 +9,7 @@ let firms = [], products = [], shipments = [], moves = [];
 let firmSel = lsGet(FIRM_KEY) || '';          // '' = tüm firmalar
 let current = 'ana';
 let editShipId = null;
+let photos = new Set(), aiOn = false, shipPhoto = null, aiKeyCache = null;
 const pages = { ship: 1, har: 1 };
 const PER = 20;
 
@@ -87,6 +88,7 @@ async function loadData(showMsg) {
   const d = await rpc('et_data');
   if (!d) return;
   firms = d.firms || []; products = d.products || []; shipments = d.shipments || []; moves = d.moves || [];
+  photos = new Set(d.photos || []); aiOn = !!d.ai;
   if (firmSel && !firms.some(f => String(f.id) === String(firmSel))) firmSel = '';
   render();
   if (showMsg) notify('Güncellendi.');
@@ -178,6 +180,7 @@ function showShipment(id) {
      <div class="table-responsive"><table class="table table-sm"><thead><tr><th>Ürün</th><th class="text-end">Boya L</th><th class="text-end">Sert. L</th><th class="text-end">Toplam</th></tr></thead>
      <tbody>${rows}</tbody><tfoot><tr><td colspan="3" class="fw-semibold">Toplam</td><td class="text-end fw-bold">${num(shipTotal(s))} L</td></tr></tfoot></table></div>`,
     `<button class="btn btn-outline-danger btn-sm me-auto" onclick="deleteShipment(${s.id})"><i class="bi bi-trash"></i> Sil</button>
+     ${photos.has(s.id) ? `<button class="btn btn-outline-primary btn-sm" onclick="showPhoto(${s.id})"><i class="bi bi-image"></i> İrsaliye</button>` : ''}
      <button class="btn btn-outline-success btn-sm" onclick="shareShipment(${s.id})"><i class="bi bi-whatsapp"></i> Paylaş</button>
      <button class="btn btn-dark btn-sm" onclick="editShipment(${s.id})"><i class="bi bi-pencil"></i> Düzenle</button>`);
 }
@@ -205,6 +208,7 @@ function newShipment() {
   $('shipFormTitle').textContent = 'Yeni sevkiyat';
   $('shFirm').innerHTML = firmOptions(firmSel || (firms.length === 1 ? firms[0].id : ''), true);
   $('shDate').value = today(); $('shIrs').value = ''; $('shNote').value = '';
+  shipPhoto = null; irsBox('');
   resetShipRows();
   $('shipFormCard').classList.remove('d-none'); $('shipOpenBtn').classList.add('d-none');
   $('shIrs').focus();
@@ -217,6 +221,7 @@ function editShipment(id) {
   $('shFirm').innerHTML = firmOptions(s.firm_id, true);
   $('shDate').value = String(s.ship_date).slice(0, 10); $('shIrs').value = s.irsaliye || ''; $('shNote').value = s.note || '';
   $('shRows').innerHTML = '';
+  shipPhoto = null; irsBox(photos.has(id) ? '<div class="tiny text-secondary"><i class="bi bi-image"></i> Kayıtlı irsaliye fotoğrafı var. Yeni fotoğraf seçerseniz değiştirilir.</div>' : '');
   s.items.forEach(i => addShipRow(i));
   $('shipFormCard').classList.remove('d-none'); $('shipOpenBtn').classList.add('d-none');
   window.scrollTo(0, 0);
@@ -307,9 +312,135 @@ async function saveShipment() {
   const res = await rpc('et_save_shipment', { p: { id: editShipId, firm_id, ship_date: $('shDate').value || today(), irsaliye: irs, note: $('shNote').value.trim(), items } });
   $('shSave').disabled = false;
   if (res === undefined) return;
+  if (shipPhoto) {
+    const ok = await rpc('et_save_photo', { p_id: Number(res), p_data: shipPhoto });
+    if (ok === undefined) notify('Sevkiyat kaydedildi ama fotoğraf kaydedilemedi.', 'warning');
+  }
   notify(editShipId ? 'Sevkiyat güncellendi.' : `Sevkiyat kaydedildi, ${num(r2(items.reduce((a, i) => a + i.boya + i.sert, 0)))} L emanetten düşüldü.`);
   closeShipForm();
   await loadData();
+}
+
+// ---------- irsaliye fotoğrafı (Gemini ile okuma) ----------
+const GEMINI_MODELS = ['gemini-flash-latest', 'gemini-3.8-flash', 'gemini-3.6-flash', 'gemini-3.5-flash-lite', 'gemini-2.5-flash'];
+function irsBox(html) { const b = $('irsBox'); b.innerHTML = html; b.classList.toggle('d-none', !html); }
+function shrinkImage(file, max = 1600, q = 0.75) {
+  return new Promise((res, rej) => {
+    const img = new Image();
+    img.onload = () => {
+      const k = Math.min(1, max / Math.max(img.width, img.height));
+      const c = document.createElement('canvas'); c.width = Math.round(img.width * k); c.height = Math.round(img.height * k);
+      c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
+      URL.revokeObjectURL(img.src);
+      res(c.toDataURL('image/jpeg', q));
+    };
+    img.onerror = () => rej(new Error('Fotoğraf açılamadı'));
+    img.src = URL.createObjectURL(file);
+  });
+}
+async function irsaliyeSecildi(inp) {
+  const file = inp.files && inp.files[0]; inp.value = '';
+  if (!file) return;
+  let data;
+  try { data = await shrinkImage(file); } catch (e) { return notify(e.message, 'danger'); }
+  shipPhoto = data;
+  const thumb = `<img src="${data}" alt="İrsaliye" style="height:64px;border-radius:8px;border:1px solid #e5e7eb" class="me-2">`;
+  if (!aiOn) {
+    irsBox(`<div class="d-flex align-items-center p-2 border rounded-3 bg-white">${thumb}<div class="tiny">Fotoğraf sevkiyata eklenecek. Otomatik okuma için Ayarlar'dan Gemini anahtarı girin.</div></div>`);
+    return;
+  }
+  irsBox(`<div class="d-flex align-items-center p-2 border rounded-3 bg-white">${thumb}<div class="tiny"><span class="spinner-border spinner-border-sm me-1"></span>İrsaliye okunuyor…</div></div>`);
+  try {
+    const r = await readIrsaliye(data);
+    applyIrsaliye(r, thumb);
+  } catch (e) {
+    irsBox(`<div class="d-flex align-items-center p-2 border rounded-3 bg-white">${thumb}<div class="tiny text-danger">Okunamadı: ${esc(e.message)}. Bilgileri elle girin; fotoğraf yine de kaydedilir.</div></div>`);
+  }
+}
+async function readIrsaliye(dataUrl) {
+  if (!aiKeyCache) aiKeyCache = await rpc('et_get_ai_key');
+  if (!aiKeyCache || aiKeyCache === true) throw new Error('Gemini anahtarı yok');
+  const firmList = firms.map(f => ({ firma_id: f.id, ad: f.name }));
+  const prodList = products.map(p => ({ urun_id: p.id, firma_id: p.firm_id, kod: p.code, ad: p.name, teneke_litre: pack(p) || null, sertlestirici_litre: hard(p) || null }));
+  const prompt = `Bu fotoğraf Türkiye'de düzenlenmiş bir sevk irsaliyesi. Malı gönderen (irsaliyeyi düzenleyen) firma, alıcı ise Yıldız Kumlama Boya'dır.
+Görevin:
+1) Düzenleyen firmayı aşağıdaki FİRMALAR listesinden eşleştir (firma_id). Eşleşmezse null.
+2) İrsaliye numarasını (seri ve sıra no birlikte) ve düzenleme/sevk tarihini oku.
+3) İrsaliyedeki ürün satırlarından YALNIZCA aşağıdaki EMANET ÜRÜNLERİ listesindeki bir ürünle eşleşenleri al. Eşleştirirken ürün kodu, renk kodu (RAL vb.) ve ürün adını kullan; emin değilsen alma. Eşleşmeyen satırları "atlananlar" listesine yaz.
+4) Her alınan satır için miktarı ve birimini oku. Birim: litre ise "L", kilogram ise "KG", teneke/kova/adet/ambalaj ise "ADET". Satır o ürünün sertleştiricisi (hardener, sertleştirici, kür) ise "sertlestirici": true yaz.
+Sayılarda Türkçe biçimi dikkate al (1.250,5 = 1250.5).
+YALNIZCA şu JSON'u döndür:
+{"firma_id": number|null, "firma_adi": string, "irsaliye_no": string, "tarih": "YYYY-MM-DD"|null,
+ "kalemler": [{"urun_id": number, "satir": string, "miktar": number, "birim": "L"|"KG"|"ADET", "sertlestirici": boolean}],
+ "atlananlar": [string]}
+FİRMALAR: ${JSON.stringify(firmList)}
+EMANET ÜRÜNLERİ: ${JSON.stringify(prodList)}`;
+  const body = { contents: [{ parts: [{ text: prompt }, { inline_data: { mime_type: 'image/jpeg', data: dataUrl.split(',')[1] } }] }],
+    generationConfig: { temperature: 0, responseMimeType: 'application/json' } };
+  let lastErr = 'Model bulunamadı';
+  for (const m of GEMINI_MODELS) {
+    const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${m}:generateContent`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json', 'x-goog-api-key': aiKeyCache }, body: JSON.stringify(body) });
+    const j = await res.json().catch(() => ({}));
+    if (res.status === 404) { lastErr = (j.error && j.error.message) || lastErr; continue; }
+    if (!res.ok) throw new Error((j.error && j.error.message) || ('HTTP ' + res.status));
+    const txt = (((j.candidates || [])[0] || {}).content || {}).parts?.map(x => x.text || '').join('') || '';
+    const clean = txt.replace(/^```(json)?/i, '').replace(/```$/, '').trim();
+    try { return JSON.parse(clean); } catch (e) { throw new Error('Yanıt çözülemedi'); }
+  }
+  throw new Error(lastErr);
+}
+// Okunan irsaliyeyi forma uygular: teneke/adet → teneke, L → boya litresi, sertleştirici satırı → sertleştirici litresi
+function applyIrsaliye(r, thumb) {
+  const warn = [];
+  const firm = firms.find(f => f.id === Number(r.firma_id));
+  const items = (r.kalemler || []).filter(k => products.some(p => p.id === Number(k.urun_id)));
+  const fid = firm ? firm.id : (items.length ? prodById(Number(items[0].urun_id)).firm_id : null);
+  if (fid) { $('shFirm').value = String(fid); } else warn.push('Firma tanınamadı, elle seçin.');
+  if (r.irsaliye_no) $('shIrs').value = String(r.irsaliye_no).trim();
+  if (r.tarih && /^\d{4}-\d{2}-\d{2}$/.test(r.tarih)) $('shDate').value = r.tarih;
+  const by = new Map();
+  items.forEach(k => {
+    const p = prodById(Number(k.urun_id));
+    if (fid && p.firm_id !== fid) { warn.push(`${p.name} başka firmaya ait, alınmadı.`); return; }
+    const q = Number(k.miktar) || 0; if (!(q > 0)) return;
+    const o = by.get(p.id) || { product_id: p.id, teneke: null, boya: null, sert: null };
+    const unit = String(k.birim || 'L').toUpperCase();
+    if (k.sertlestirici) {
+      const l = unit === 'ADET' ? (hard(p) ? q * hard(p) : null) : q;
+      if (l == null) warn.push(`${p.name}: sertleştirici adedi okundu ama sertleştirici litresi tanımlı değil.`);
+      else o.sert = r2((o.sert || 0) + l);
+    } else if (unit === 'ADET') {
+      if (pack(p)) o.teneke = r2((o.teneke || 0) + q); else { o.boya = r2((o.boya || 0) + q); warn.push(`${p.name}: adet okundu, teneke litresi tanımlı değil; miktarı kontrol edin.`); }
+    } else {
+      if (unit === 'KG') warn.push(`${p.name}: miktar KG olarak okundu, litre olarak alındı; kontrol edin.`);
+      o.boya = r2((o.boya || 0) + q);
+    }
+    by.set(p.id, o);
+  });
+  $('shRows').innerHTML = '';
+  if (by.size) by.forEach(o => addShipRow({ product_id: o.product_id, teneke: o.teneke, boya: o.boya ?? (o.teneke != null ? r2(o.teneke * pack(prodById(o.product_id))) : 0),
+    sert: o.sert ?? autoSert(o) }));
+  else addShipRow();
+  const skipped = (r.atlananlar || []).filter(Boolean);
+  irsBox(`<div class="d-flex align-items-start p-2 border rounded-3 bg-white">${thumb}<div class="tiny">
+    <div class="text-success fw-semibold"><i class="bi bi-check-circle"></i> İrsaliye okundu: ${by.size} emanet ürünü bulundu.</div>
+    ${skipped.length ? `<div class="text-secondary">Emanet dışı atlanan: ${skipped.map(esc).join(', ')}</div>` : ''}
+    ${warn.length ? `<div class="text-danger">${warn.map(esc).join('<br>')}</div>` : ''}
+    <div class="text-secondary">Kaydetmeden önce bilgileri kontrol edin.</div></div></div>`);
+}
+function autoSert(o) {  // irsaliyede sertleştirici satırı yoksa formun kendi hesabı kullanılsın
+  const p = prodById(o.product_id);
+  if (!(hard(p) > 0)) return 0;
+  if (o.teneke != null) return r2(o.teneke * hard(p));
+  return pack(p) && o.boya != null ? r2(o.boya / pack(p) * hard(p)) : 0;
+}
+async function showPhoto(id) {
+  const d = await rpc('et_get_photo', { p_id: id });
+  if (!d || d === true) return notify('Fotoğraf bulunamadı.', 'warning');
+  const s = shipments.find(x => x.id === id) || {};
+  dialog(`İrsaliye ${esc(s.irsaliye || '')}`, `<a href="${d}" target="_blank" rel="noopener"><img src="${d}" alt="İrsaliye" class="img-fluid rounded-3 border"></a>`,
+    `<a class="btn btn-outline-dark btn-sm" href="${d}" download="irsaliye-${esc(s.irsaliye || id)}.jpg"><i class="bi bi-download"></i> İndir</a>`);
 }
 
 // ---------- depo ----------
@@ -479,7 +610,19 @@ function renderReport() {
 }
 
 // ---------- ayarlar ----------
+function renderAi() {
+  $('aiState').innerHTML = aiOn ? '<span class="text-success"><i class="bi bi-check-circle"></i> Anahtar kayıtlı, irsaliye okuma açık.</span>'
+    : '<span class="text-danger"><i class="bi bi-x-circle"></i> Anahtar yok, irsaliye okuma kapalı.</span>';
+}
+async function saveAiKey() {
+  const k = $('aiKey').value.trim();
+  if (k && !/^[A-Za-z0-9_\-]{20,}$/.test(k)) return notify('Anahtar geçersiz görünüyor.', 'warning');
+  if (await rpc('et_set_ai_key', { p_key: k }) === undefined) return;
+  aiKeyCache = null; $('aiKey').value = '';
+  notify(k ? 'Anahtar kaydedildi.' : 'Anahtar silindi.'); await loadData();
+}
 function renderFirms() {
+  renderAi();
   $('firmList').innerHTML = firms.map(f => `<div class="input-group input-group-sm">
     <input class="form-control" id="firm-${f.id}" value="${esc(f.name)}">
     <button class="btn btn-outline-dark" onclick="saveFirm(${f.id})" title="Kaydet"><i class="bi bi-check2"></i></button>
