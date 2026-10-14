@@ -420,7 +420,7 @@ Görevin:
 1) Düzenleyen firmayı aşağıdaki FİRMALAR listesinden eşleştir (firma_id). Eşleşmezse null.
 2) İrsaliye numarasını (seri ve sıra no birlikte) oku. Tarihleri oku: "Fiili Sevk Tarihi"/"Sevk Tarihi" alanını sevk_tarihi olarak, "Düzenleme Tarihi"/"İrsaliye Tarihi" alanını duzenleme_tarihi olarak YYYY-MM-DD biçiminde yaz (gün.ay.yıl biçimini doğru çevir). Okunamayanı null bırak.
 3) İrsaliyedeki ürün satırlarından YALNIZCA aşağıdaki EMANET ÜRÜNLERİ listesindeki bir ürünle eşleşenleri al. Eşleştirirken ürün kodu, renk kodu (RAL vb.) ve ürün adını kullan; emin değilsen alma. Eşleşmeyen satırları "atlananlar" listesine yaz.
-4) Her alınan satır için miktarı ve birimini oku. Birim: litre ise "L", kilogram ise "KG", teneke/kova/adet/ambalaj ise "ADET". Satır o ürünün sertleştiricisi (hardener, sertleştirici, kür) ise "sertlestirici": true yaz.
+4) Her alınan satır için miktarı ve birimini oku. Birim: litre ise "L", kilogram ise "KG", teneke/kova/adet/ambalaj ise "ADET". Satırda "HARDENER", "HARD.", "SERTLEŞTİRİCİ", "SERT.", "KÜR", "CURING AGENT", "B KOMPONENT", "COMP. B" gibi bir ifade varsa o satır SERTLEŞTİRİCİDİR: "sertlestirici": true yaz ve onu ait olduğu boya ürününe (aynı ürün ailesi/kodu, aynı seri; renk kodu olmayabilir) eşleştir; sertleştiricinin kendisi listede ayrıca olmasa bile bu satırı ATLAMA. Aynı boya için birden çok sertleştirici satırı varsa ayrı ayrı yaz.
 Sayılarda Türkçe biçimi dikkate al (1.250,5 = 1250.5).
 YALNIZCA şu JSON'u döndür:
 {"firma_id": number|null, "firma_adi": string, "irsaliye_no": string, "sevk_tarihi": "YYYY-MM-DD"|null, "duzenleme_tarihi": "YYYY-MM-DD"|null,
@@ -467,6 +467,8 @@ function applyIrsaliye(r, thumb) {
     const q = Number(k.miktar) || 0; if (!(q > 0)) return;
     const o = by.get(p.id) || { product_id: p.id, teneke: null, boya: null, sert: null };
     const unit = String(k.birim || 'L').toUpperCase();
+    // "hardener", "sertleştirici", "kür" geçen satır her zaman sertleştiricidir
+    if (/hardener|\bhard\.|sertle[sş]tir|\bsert\.|(^|[^a-zçğıöşü])kür([^a-zçğıöşü]|$)|curing/.test(String(k.satir || '').toLocaleLowerCase('tr'))) k.sertlestirici = true;
     if (k.sertlestirici) {
       const l = unit === 'ADET' ? (hard(p) ? q * hard(p) : null) : q;
       if (l == null) warn.push(`${p.name}: sertleştirici adedi okundu ama sertleştirici litresi tanımlı değil.`);
