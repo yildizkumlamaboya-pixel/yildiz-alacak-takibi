@@ -49,6 +49,22 @@ const tnkTxt = (p, l) => {
   const n = r2(l / setL(p));
   return hard(p) > 0 ? `${num(n)} teneke + ${num(n)} sertleştirici` : `${num(n)} teneke`;
 };
+// Firma logosu: yüklenen logo, yoksa bilinen firmalar için hazır logo, yoksa baş harfler
+function firmLogoSrc(f) {
+  if (!f) return '';
+  if (f.logo) return f.logo;
+  const n = String(f.name || '').toLocaleLowerCase('tr');
+  if (n.includes('delta')) return '../logo-delta.webp';
+  if (n.includes('minimar')) return '../logo-minimar.webp';
+  return '';
+}
+function firmLogo(f, h = 22) {
+  const src = firmLogoSrc(f);
+  if (src) return `<img src="${src}" alt="" class="flogo" style="height:${h}px">`;
+  const ini = String((f && f.name) || '?').split(/\s+/).map(w => w[0]).join('').slice(0, 2).toLocaleUpperCase('tr');
+  return `<span class="fini" style="width:${h}px;height:${h}px">${esc(ini)}</span>`;
+}
+const firmTitle = (f, h) => `<span class="d-inline-flex align-items-center gap-2">${firmLogo(f, h)}<span>${esc((f && f.name) || '')}</span></span>`;
 const prodLabel = p => `${p.code ? p.code + ' • ' : ''}${p.name}`;
 const inFirm = fid => !firmSel || String(fid) === String(firmSel);
 
@@ -113,7 +129,7 @@ function render() {
 }
 function renderChips() {
   const html = [`<button class="btn ${!firmSel ? 'btn-dark' : 'btn-outline-dark'}" onclick="setFirm('')">Tüm firmalar</button>`]
-    .concat(firms.map(f => `<button class="btn ${String(firmSel) === String(f.id) ? 'btn-dark' : 'btn-outline-dark'}" onclick="setFirm(${f.id})">${esc(f.name)}</button>`)).join('');
+    .concat(firms.map(f => `<button class="btn ${String(firmSel) === String(f.id) ? 'btn-dark' : 'btn-outline-dark'}" onclick="setFirm(${f.id})">${firmLogoSrc(f) ? `<img src="${firmLogoSrc(f)}" alt="" class="flogo" style="${String(firmSel) === String(f.id) ? 'filter:brightness(0) invert(1)' : ''}">` : ''}${esc(f.name)}</button>`)).join('');
   document.querySelectorAll('[data-chips]').forEach(el => { el.innerHTML = firms.length > 1 ? html : ''; });
 }
 function setFirm(id) { firmSel = id ? String(id) : ''; lsSet(FIRM_KEY, firmSel || null); pages.ship = pages.har = 1; render(); }
@@ -148,7 +164,7 @@ function shipCard(s) {
   return `<div class="card p-3 clickable" onclick="showShipment(${s.id})">
     <div class="d-flex justify-content-between align-items-start gap-2">
       <div class="min-w-0">
-        <div class="fw-semibold">${esc(f.name || '')}</div>
+        <div class="fw-semibold">${firmTitle(f, 22)}</div>
         <div class="tiny text-secondary text-break"><i class="bi bi-receipt"></i> ${esc(s.irsaliye || '-')} &nbsp;•&nbsp; ${fmtD(s.ship_date)}${photos.has(s.id) ? ' &nbsp;<i class="bi bi-image"></i>' : ''}</div>
       </div>
       <span class="tot-badge">${num(shipTotal(s))} L</span>
@@ -183,7 +199,7 @@ function showShipment(id) {
     return `<tr><td>${esc(prodLabel(p))}<div class="tiny text-secondary">${i.teneke ? num(i.teneke) + ' teneke' : (pack(p) ? '≈ ' + num(r2(i.boya / pack(p))) + ' teneke' : '')}</div></td>
       <td class="text-end">${num(i.boya)}</td><td class="text-end">${num(i.sert)}</td><td class="text-end fw-semibold">${num(r2(Number(i.boya) + Number(i.sert)))}</td></tr>`;
   }).join('');
-  dialog(`${esc(firmById(s.firm_id).name)} • İrsaliye ${esc(s.irsaliye || '-')}`,
+  dialog(`${firmTitle(firmById(s.firm_id), 24)} <span class="tiny text-secondary ms-1">İrsaliye ${esc(s.irsaliye || '-')}</span>`,
     `<div class="tiny text-secondary mb-2">${fmtD(s.ship_date)}${s.note ? ' • ' + esc(s.note) : ''}</div>
      <div class="table-responsive"><table class="table table-sm"><thead><tr><th>Ürün</th><th class="text-end">Boya L</th><th class="text-end">Sert. L</th><th class="text-end">Toplam</th></tr></thead>
      <tbody>${rows}</tbody><tfoot><tr><td colspan="3" class="fw-semibold">Toplam</td><td class="text-end fw-bold">${num(shipTotal(s))} L</td></tr></tfoot></table></div>`,
@@ -384,12 +400,12 @@ async function readIrsaliye(dataUrl, busy = () => {}) {
   const prompt = `Bu fotoğraf Türkiye'de düzenlenmiş bir sevk irsaliyesi. Malı gönderen (irsaliyeyi düzenleyen) firma, alıcı ise Yıldız Kumlama Boya'dır.
 Görevin:
 1) Düzenleyen firmayı aşağıdaki FİRMALAR listesinden eşleştir (firma_id). Eşleşmezse null.
-2) İrsaliye numarasını (seri ve sıra no birlikte) ve düzenleme/sevk tarihini oku.
+2) İrsaliye numarasını (seri ve sıra no birlikte) oku. Tarihleri oku: "Fiili Sevk Tarihi"/"Sevk Tarihi" alanını sevk_tarihi olarak, "Düzenleme Tarihi"/"İrsaliye Tarihi" alanını duzenleme_tarihi olarak YYYY-MM-DD biçiminde yaz (gün.ay.yıl biçimini doğru çevir). Okunamayanı null bırak.
 3) İrsaliyedeki ürün satırlarından YALNIZCA aşağıdaki EMANET ÜRÜNLERİ listesindeki bir ürünle eşleşenleri al. Eşleştirirken ürün kodu, renk kodu (RAL vb.) ve ürün adını kullan; emin değilsen alma. Eşleşmeyen satırları "atlananlar" listesine yaz.
 4) Her alınan satır için miktarı ve birimini oku. Birim: litre ise "L", kilogram ise "KG", teneke/kova/adet/ambalaj ise "ADET". Satır o ürünün sertleştiricisi (hardener, sertleştirici, kür) ise "sertlestirici": true yaz.
 Sayılarda Türkçe biçimi dikkate al (1.250,5 = 1250.5).
 YALNIZCA şu JSON'u döndür:
-{"firma_id": number|null, "firma_adi": string, "irsaliye_no": string, "tarih": "YYYY-MM-DD"|null,
+{"firma_id": number|null, "firma_adi": string, "irsaliye_no": string, "sevk_tarihi": "YYYY-MM-DD"|null, "duzenleme_tarihi": "YYYY-MM-DD"|null,
  "kalemler": [{"urun_id": number, "satir": string, "miktar": number, "birim": "L"|"KG"|"ADET", "sertlestirici": boolean}],
  "atlananlar": [string]}
 FİRMALAR: ${JSON.stringify(firmList)}
@@ -424,7 +440,8 @@ function applyIrsaliye(r, thumb) {
   const fid = firm ? firm.id : (items.length ? prodById(Number(items[0].urun_id)).firm_id : null);
   if (fid) { $('shFirm').value = String(fid); } else warn.push('Firma tanınamadı, elle seçin.');
   if (r.irsaliye_no) $('shIrs').value = String(r.irsaliye_no).trim();
-  if (r.tarih && /^\d{4}-\d{2}-\d{2}$/.test(r.tarih)) $('shDate').value = r.tarih;
+  const tarih = isoDate(r.sevk_tarihi) || isoDate(r.duzenleme_tarihi) || isoDate(r.tarih);
+  if (tarih) $('shDate').value = tarih; else warn.push('Sevk tarihi okunamadı, elle kontrol edin.');
   const by = new Map();
   items.forEach(k => {
     const p = prodById(Number(k.urun_id));
@@ -451,9 +468,18 @@ function applyIrsaliye(r, thumb) {
   const skipped = (r.atlananlar || []).filter(Boolean);
   irsBox(`<div class="d-flex align-items-start p-2 border rounded-3 bg-white">${thumb}<div class="tiny">
     <div class="text-success fw-semibold"><i class="bi bi-check-circle"></i> İrsaliye okundu: ${by.size} emanet ürünü bulundu.</div>
+    <div>${firm ? esc(firm.name) + ' • ' : ''}${esc(r.irsaliye_no || '')}${tarih ? ' • Sevk tarihi ' + fmtD(tarih) : ''}</div>
     ${skipped.length ? `<div class="text-secondary">Emanet dışı atlanan: ${skipped.map(esc).join(', ')}</div>` : ''}
     ${warn.length ? `<div class="text-danger">${warn.map(esc).join('<br>')}</div>` : ''}
     <div class="text-secondary">Kaydetmeden önce bilgileri kontrol edin.</div></div></div>`);
+}
+function isoDate(v) {   // 2026-10-13, 13.10.2026, 13/10/2026 → 2026-10-13
+  const t = String(v || '').trim();
+  let m = t.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/);
+  if (m) return `${m[1]}-${m[2].padStart(2, '0')}-${m[3].padStart(2, '0')}`;
+  m = t.match(/^(\d{1,2})[./-](\d{1,2})[./-](\d{2,4})/);
+  if (m) { const y = m[3].length === 2 ? '20' + m[3] : m[3]; return `${y}-${m[2].padStart(2, '0')}-${m[1].padStart(2, '0')}`; }
+  return '';
 }
 function autoSert(o) {  // irsaliyede sertleştirici satırı yoksa formun kendi hesabı kullanılsın
   const p = prodById(o.product_id);
@@ -480,7 +506,7 @@ function renderStock() {
     const ps = products.filter(p => p.firm_id === f.id && (!q || prodLabel(p).toLocaleLowerCase('tr').includes(q)));
     if (!ps.length) return '';
     const tot = ps.reduce((a, p) => a + stockOf(p).kalan, 0);
-    return `<div class="d-flex justify-content-between align-items-center mt-2"><div class="fw-semibold">${esc(f.name)}</div><span class="badge text-bg-light border">Toplam ${num(r2(tot))} L</span></div>` +
+    return `<div class="d-flex justify-content-between align-items-center mt-2"><div class="fw-semibold">${firmTitle(f, 24)}</div><span class="badge text-bg-light border">Toplam ${num(r2(tot))} L</span></div>` +
       ps.map(p => {
         const s = stockOf(p), low = Number(p.warn) > 0 && s.kalan < Number(p.warn);
         return `<div class="card p-3 clickable ${low ? 'low-card' : ''}" onclick="showProduct(${p.id})">
@@ -657,11 +683,47 @@ async function saveAiKey() {
 }
 function renderFirms() {
   renderAi();
-  $('firmList').innerHTML = firms.map(f => `<div class="input-group input-group-sm">
-    <input class="form-control" id="firm-${f.id}" value="${esc(f.name)}">
-    <button class="btn btn-outline-dark" onclick="saveFirm(${f.id})" title="Kaydet"><i class="bi bi-check2"></i></button>
-    <button class="btn btn-outline-danger" onclick="deleteFirm(${f.id})" title="Sil"><i class="bi bi-trash"></i></button></div>`).join('')
+  $('firmList').innerHTML = firms.map(f => `<div class="border rounded-3 p-2">
+    <div class="input-group input-group-sm mb-2">
+      <span class="input-group-text bg-white">${firmLogo(f, 22)}</span>
+      <input class="form-control" id="firm-${f.id}" value="${esc(f.name)}">
+      <button class="btn btn-outline-dark" onclick="saveFirm(${f.id})" title="Kaydet"><i class="bi bi-check2"></i></button>
+      <button class="btn btn-outline-danger" onclick="deleteFirm(${f.id})" title="Sil"><i class="bi bi-trash"></i></button>
+    </div>
+    <div class="d-flex gap-2">
+      <button class="btn btn-sm btn-light border flex-fill" onclick="pickLogo(${f.id})"><i class="bi bi-image"></i> Logo ${f.logo ? 'değiştir' : 'yükle'}</button>
+      ${f.logo ? `<button class="btn btn-sm btn-light border" onclick="setLogo(${f.id}, '')"><i class="bi bi-x-lg"></i> Logoyu kaldır</button>` : ''}
+    </div></div>`).join('')
     || '<div class="tiny text-secondary">Henüz firma yok.</div>';
+}
+function pickLogo(id) {
+  const inp = document.createElement('input');
+  inp.type = 'file'; inp.accept = 'image/*';
+  inp.onchange = async () => {
+    const file = inp.files && inp.files[0]; if (!file) return;
+    try { await setLogo(id, await logoData(file)); } catch (e) { notify(e.message, 'danger'); }
+  };
+  inp.click();
+}
+function logoData(file) {   // logoyu en fazla 360x120 piksele küçültür, şeffaflığı korur
+  return new Promise((res, rej) => {
+    const img = new Image();
+    img.onload = () => {
+      const k = Math.min(1, 360 / img.width, 120 / img.height);
+      const c = document.createElement('canvas'); c.width = Math.max(1, Math.round(img.width * k)); c.height = Math.max(1, Math.round(img.height * k));
+      c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
+      URL.revokeObjectURL(img.src);
+      let d = c.toDataURL('image/webp', 0.9);
+      if (!d.startsWith('data:image/webp')) d = c.toDataURL('image/png');
+      res(d);
+    };
+    img.onerror = () => rej(new Error('Logo açılamadı'));
+    img.src = URL.createObjectURL(file);
+  });
+}
+async function setLogo(id, data) {
+  if (await rpc('et_save_firm_logo', { p_id: id, p_data: data }) === undefined) return;
+  notify(data ? 'Logo kaydedildi.' : 'Logo kaldırıldı.'); await loadData();
 }
 async function saveFirm(id) {
   const name = (id ? $('firm-' + id) : $('newFirm')).value.trim();
