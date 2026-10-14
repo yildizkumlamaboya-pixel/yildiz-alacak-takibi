@@ -616,10 +616,18 @@ function renderAi() {
 }
 async function saveAiKey() {
   const k = $('aiKey').value.trim();
-  if (k && !/^[A-Za-z0-9_\-]{20,}$/.test(k)) return notify('Anahtar geçersiz görünüyor.', 'warning');
+  if (k && !/^[A-Za-z0-9_.\-]{20,}$/.test(k)) return notify('Anahtar geçersiz görünüyor; tamamını kopyalayıp yapıştırın.', 'warning');
   if (await rpc('et_set_ai_key', { p_key: k }) === undefined) return;
   aiKeyCache = null; $('aiKey').value = '';
-  notify(k ? 'Anahtar kaydedildi.' : 'Anahtar silindi.'); await loadData();
+  await loadData();
+  if (!k) return notify('Anahtar silindi.');
+  // Anahtarı Google'a sorarak dene
+  try {
+    const res = await fetch('https://generativelanguage.googleapis.com/v1beta/models?pageSize=50', { headers: { 'x-goog-api-key': k } });
+    const j = await res.json().catch(() => ({}));
+    if (res.ok) notify('Anahtar kaydedildi ve Google tarafından doğrulandı.');
+    else notify('Anahtar kaydedildi ama Google kabul etmedi: ' + ((j.error && j.error.message) || res.status), 'danger');
+  } catch (e) { notify('Anahtar kaydedildi; bağlantı denenemedi.', 'warning'); }
 }
 function renderFirms() {
   renderAi();
