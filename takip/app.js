@@ -249,7 +249,7 @@ function editShipment(id) {
   $('shFirm').innerHTML = firmOptions(s.firm_id, true);
   $('shDate').value = String(s.ship_date).slice(0, 10); $('shIrs').value = s.irsaliye || ''; $('shNote').value = s.note || '';
   $('shRows').innerHTML = '';
-  shipPhoto = null; irsBox(photos.has(id) ? '<div class="tiny text-secondary"><i class="bi bi-image"></i> Kayıtlı irsaliye fotoğrafı var. Yeni fotoğraf seçerseniz değiştirilir.</div>' : '');
+  shipPhoto = null; irsBox(photos.has(id) ? '<div class="tiny text-secondary"><i class="bi bi-image"></i> Kayıtlı irsaliye belgesi var. Yeni fotoğraf/PDF seçerseniz değiştirilir.</div>' : '');
   s.items.forEach(i => addShipRow(i));
   $('shipFormCard').classList.remove('d-none'); $('shipOpenBtn').classList.add('d-none');
   window.scrollTo(0, 0);
@@ -340,8 +340,9 @@ async function saveShipment() {
   const res = await rpc('et_save_shipment', { p: { id: editShipId, firm_id, ship_date: $('shDate').value || today(), irsaliye: irs, note: $('shNote').value.trim(), items } });
   $('shSave').disabled = false;
   if (res === undefined) return;
-  if (shipPhoto) {
-    const ok = await rpc('et_save_photo', { p_id: Number(res), p_data: shipPhoto });
+  if (shipPhoto && shipPhoto.length > 2900000) notify('Sevkiyat kaydedildi; belge 2 MB\'tan büyük olduğu için saklanmadı.', 'warning');
+  else if (shipPhoto) {
+    let ok; try { ok = await rpc('et_save_photo', { p_id: Number(res), p_data: shipPhoto }); } catch (e) { ok = undefined; }
     if (ok === undefined) notify('Sevkiyat kaydedildi ama fotoğraf kaydedilemedi.', 'warning');
   }
   notify(editShipId ? 'Sevkiyat güncellendi.' : `Sevkiyat kaydedildi, ${num(r2(items.reduce((a, i) => a + i.boya + i.sert, 0)))} L emanetten düşüldü.`);
@@ -366,22 +367,35 @@ function shrinkImage(file, max = 1600, q = 0.75) {
     img.src = URL.createObjectURL(file);
   });
 }
+const isPdf = d => String(d || '').startsWith('data:application/pdf');
+function readAsDataUrl(file) {
+  return new Promise((res, rej) => { const fr = new FileReader(); fr.onload = () => res(fr.result); fr.onerror = () => rej(new Error('Dosya okunamadı')); fr.readAsDataURL(file); });
+}
+function irsThumb(d) {
+  return isPdf(d) ? `<span class="d-inline-flex flex-column align-items-center justify-content-center me-2 border rounded-3 bg-light text-danger" style="width:56px;height:64px;flex:none"><i class="bi bi-file-earmark-pdf fs-3"></i><span class="tiny">PDF</span></span>`
+    : `<img src="${d}" alt="İrsaliye" style="height:64px;border-radius:8px;border:1px solid #e5e7eb" class="me-2">`;
+}
 async function irsaliyeSecildi(inp) {
   const file = inp.files && inp.files[0]; inp.value = '';
   if (!file) return;
   let data;
-  try { data = await shrinkImage(file); } catch (e) { return notify(e.message, 'danger'); }
+  try {
+    if (file.type === 'application/pdf' || /\.pdf$/i.test(file.name)) {
+      if (file.size > 15 * 1024 * 1024) return notify('PDF çok büyük (en fazla 15 MB).', 'warning');
+      data = await readAsDataUrl(file);
+      if (!isPdf(data)) data = 'data:application/pdf;base64,' + String(data).split(',')[1];
+    } else data = await shrinkImage(file);
+  } catch (e) { return notify(e.message, 'danger'); }
   shipPhoto = data;
-  const thumb = `<img src="${data}" alt="İrsaliye" style="height:64px;border-radius:8px;border:1px solid #e5e7eb" class="me-2">`;
   if (!aiOn) {
-    irsBox(`<div class="d-flex align-items-center p-2 border rounded-3 bg-white">${thumb}<div class="tiny">Fotoğraf sevkiyata eklenecek. Otomatik okuma için Ayarlar'dan Gemini anahtarı girin.</div></div>`);
+    irsBox(`<div class="d-flex align-items-center p-2 border rounded-3 bg-white">${irsThumb(data)}<div class="tiny">${isPdf(data) ? 'PDF' : 'Fotoğraf'} sevkiyata eklenecek. Otomatik okuma için Ayarlar'dan Gemini anahtarı girin.</div></div>`);
     return;
   }
   await irsOku();
 }
 async function irsOku() {
   if (!shipPhoto) return;
-  const thumb = `<img src="${shipPhoto}" alt="İrsaliye" style="height:64px;border-radius:8px;border:1px solid #e5e7eb" class="me-2">`;
+  const thumb = irsThumb(shipPhoto);
   const busy = t => irsBox(`<div class="d-flex align-items-center p-2 border rounded-3 bg-white">${thumb}<div class="tiny"><span class="spinner-border spinner-border-sm me-1"></span>${t}</div></div>`);
   busy('İrsaliye okunuyor…');
   try {
@@ -401,7 +415,7 @@ async function readIrsaliye(dataUrl, busy = () => {}) {
   if (!aiKeyCache || aiKeyCache === true) throw new Error('Gemini anahtarı yok');
   const firmList = firms.map(f => ({ firma_id: f.id, ad: f.name }));
   const prodList = products.map(p => ({ urun_id: p.id, firma_id: p.firm_id, kod: p.code, ad: p.name, teneke_litre: pack(p) || null, sertlestirici_litre: hard(p) || null }));
-  const prompt = `Bu fotoğraf Türkiye'de düzenlenmiş bir sevk irsaliyesi. Malı gönderen (irsaliyeyi düzenleyen) firma, alıcı ise Yıldız Kumlama Boya'dır.
+  const prompt = `Bu belge (fotoğraf veya PDF) Türkiye'de düzenlenmiş bir sevk irsaliyesi (e-irsaliye olabilir); birden çok sayfa varsa hepsini oku. Malı gönderen (irsaliyeyi düzenleyen) firma, alıcı ise Yıldız Kumlama Boya'dır.
 Görevin:
 1) Düzenleyen firmayı aşağıdaki FİRMALAR listesinden eşleştir (firma_id). Eşleşmezse null.
 2) İrsaliye numarasını (seri ve sıra no birlikte) oku. Tarihleri oku: "Fiili Sevk Tarihi"/"Sevk Tarihi" alanını sevk_tarihi olarak, "Düzenleme Tarihi"/"İrsaliye Tarihi" alanını duzenleme_tarihi olarak YYYY-MM-DD biçiminde yaz (gün.ay.yıl biçimini doğru çevir). Okunamayanı null bırak.
@@ -414,7 +428,7 @@ YALNIZCA şu JSON'u döndür:
  "atlananlar": [string]}
 FİRMALAR: ${JSON.stringify(firmList)}
 EMANET ÜRÜNLERİ: ${JSON.stringify(prodList)}`;
-  const body = { contents: [{ parts: [{ text: prompt }, { inline_data: { mime_type: 'image/jpeg', data: dataUrl.split(',')[1] } }] }],
+  const body = { contents: [{ parts: [{ text: prompt }, { inline_data: { mime_type: isPdf(dataUrl) ? 'application/pdf' : 'image/jpeg', data: dataUrl.split(',')[1] } }] }],
     generationConfig: { temperature: 0, responseMimeType: 'application/json' } };
   // Yoğunluk/kota hatasında sıradaki modele geçer; hepsi yoğunsa biraz bekleyip bir tur daha dener
   let lastErr = 'Model bulunamadı';
@@ -493,10 +507,18 @@ function autoSert(o) {  // irsaliyede sertleştirici satırı yoksa formun kendi
 }
 async function showPhoto(id) {
   const d = await rpc('et_get_photo', { p_id: id });
-  if (!d || d === true) return notify('Fotoğraf bulunamadı.', 'warning');
+  if (!d || d === true) return notify('Belge bulunamadı.', 'warning');
   const s = shipments.find(x => x.id === id) || {};
+  const name = `irsaliye-${String(s.irsaliye || id).replace(/[^\w.-]+/g, '_')}`;
+  if (isPdf(d)) {
+    const url = URL.createObjectURL(new Blob([Uint8Array.from(atob(d.split(',')[1]), c => c.charCodeAt(0))], { type: 'application/pdf' }));
+    dialog(`İrsaliye ${esc(s.irsaliye || '')}`, `<div class="text-center py-3"><i class="bi bi-file-earmark-pdf text-danger" style="font-size:3rem"></i><div class="small mt-2">İrsaliye PDF olarak kayıtlı.</div></div>`,
+      `<a class="btn btn-dark btn-sm" href="${url}" target="_blank" rel="noopener"><i class="bi bi-box-arrow-up-right"></i> PDF'i Aç</a>
+       <a class="btn btn-outline-dark btn-sm" href="${url}" download="${name}.pdf"><i class="bi bi-download"></i> İndir</a>`);
+    return;
+  }
   dialog(`İrsaliye ${esc(s.irsaliye || '')}`, `<a href="${d}" target="_blank" rel="noopener"><img src="${d}" alt="İrsaliye" class="img-fluid rounded-3 border"></a>`,
-    `<a class="btn btn-outline-dark btn-sm" href="${d}" download="irsaliye-${esc(s.irsaliye || id)}.jpg"><i class="bi bi-download"></i> İndir</a>`);
+    `<a class="btn btn-outline-dark btn-sm" href="${d}" download="${name}.jpg"><i class="bi bi-download"></i> İndir</a>`);
 }
 
 // ---------- depo ----------
