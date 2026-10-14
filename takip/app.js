@@ -21,6 +21,7 @@ const r2 = n => Math.round((Number(n) || 0) * 100) / 100;
 const num = n => (Number(n) || 0).toLocaleString('tr-TR', { maximumFractionDigits: 2 });
 const today = () => { const d = new Date(); d.setMinutes(d.getMinutes() - d.getTimezoneOffset()); return d.toISOString().slice(0, 10); };
 const fmtD = s => s ? String(s).slice(0, 10).split('-').reverse().join('.') : '';
+const dlab = d => d ? fmtD(d) : 'Açılış';
 const pnum = v => { if (v === '' || v == null) return null; const n = parseFloat(String(v).replace(',', '.')); return isFinite(n) ? n : null; };
 function notify(msg, type = 'success') {
   const t = $('toast');
@@ -120,7 +121,10 @@ function go(tab, replace) {
   render();
   window.scrollTo(0, 0);
 }
-window.addEventListener('popstate', () => { if (pass) go(location.hash.slice(1) || 'ana', true); });
+window.addEventListener('popstate', () => {
+  const v = $('docView'); if (v && !v.classList.contains('d-none') && location.hash !== '#ekstre') { v.classList.add('d-none'); document.title = 'Yıldız Emanet Takip'; return; }
+  if (pass) go(location.hash.slice(1) || 'ana', true);
+});
 
 function render() {
   renderChips();
@@ -521,7 +525,8 @@ function renderStock() {
 }
 function productHistory(p) {
   const rows = [];
-  rows.push({ d: String(p.created_at || '').slice(0, 10), t: 'Başlangıç emaneti', q: Number(p.opening), k: 'acilis' });
+  // Başlangıç emaneti her zaman en başta sayılır (geriye dönük girilen sevkiyatlar bakiyeyi eksiye düşürmesin)
+  rows.push({ d: '', t: 'Başlangıç emaneti', q: Number(p.opening), k: 'acilis' });
   moves.filter(m => m.product_id === p.id).forEach(m => rows.push({ d: m.move_date, t: m.note || (m.qty > 0 ? 'Emanet eklendi' : 'Emanet düşüldü'), q: Number(m.qty), k: m.qty > 0 ? 'ekle' : 'dus', moveId: m.id }));
   shipments.forEach(s => s.items.filter(i => i.product_id === p.id).forEach(i => rows.push({ d: s.ship_date, t: `Sevkiyat • İrsaliye ${s.irsaliye || '-'}`, q: -(Number(i.boya) + Number(i.sert)), k: 'sevk', shipId: s.id })));
   return rows;
@@ -530,7 +535,7 @@ function showProduct(id) {
   const p = prodById(id), s = stockOf(p);
   const rows = productHistory(p).sort((a, b) => String(a.d).localeCompare(String(b.d)));
   let bal = 0;
-  const body = rows.map(r => { bal = r2(bal + r.q); return `<tr><td class="text-nowrap">${fmtD(r.d)}</td><td>${esc(r.t)}</td><td class="text-end ${r.q < 0 ? 'mv-out' : 'mv-in'}">${r.q > 0 ? '+' : ''}${num(r.q)}</td><td class="text-end">${num(bal)}</td></tr>`; }).reverse().join('');
+  const body = rows.map(r => { bal = r2(bal + r.q); return `<tr><td class="text-nowrap">${dlab(r.d)}</td><td>${esc(r.t)}</td><td class="text-end ${r.q < 0 ? 'mv-out' : 'mv-in'}">${r.q > 0 ? '+' : ''}${num(r.q)}</td><td class="text-end">${num(bal)}</td></tr>`; }).reverse().join('');
   dialog(esc(p.name), `<div class="row g-2 mb-3">
       <div class="col-4"><div class="stat"><div class="tiny text-secondary">Kalan</div><div class="v">${num(s.kalan)} L</div></div></div>
       <div class="col-4"><div class="stat"><div class="tiny text-secondary">Teslim alınan</div><div class="v">${num(s.out)} L</div></div></div>
@@ -619,7 +624,7 @@ function renderMoves() {
     .sort((a, b) => String(b.d).localeCompare(String(a.d)) || (a.k === 'acilis') - (b.k === 'acilis'));
   const pg = paginate(rows, 'har');
   $('moveBody').innerHTML = pg.items.map(r => `<tr>
-    <td class="text-nowrap">${fmtD(r.d)}</td>
+    <td class="text-nowrap">${dlab(r.d)}</td>
     <td>${esc(r.p.name)}<div class="tiny text-secondary">${esc(firmById(r.p.firm_id).name)}</div></td>
     <td class="small ${r.shipId ? 'clickable text-primary' : ''}" ${r.shipId ? `onclick="showShipment(${r.shipId})"` : ''}>${esc(r.t)}</td>
     <td class="text-end text-nowrap ${r.q < 0 ? 'mv-out' : 'mv-in'}">${r.q > 0 ? '+' : ''}${num(r.q)}</td>
@@ -659,6 +664,86 @@ function renderReport() {
     <td class="text-end">${num(r.tot)} L${r.sert ? `<div class="tiny text-secondary">${num(r.boya)} + ${num(r.sert)}</div>` : ''}</td>
     <td class="text-end">${pack(r.p) && r.boya ? num(r2(r.boya / pack(r.p))) : '-'}</td>
     <td class="text-end">${num(r.kalan)} L</td></tr>`).join('') || '<tr><td colspan="4" class="text-center text-secondary py-3">Kayıt yok.</td></tr>';
+}
+
+// ---------- ekstre (yazdırılabilir / PDF) ----------
+function openEkstre() {
+  const from = $('rFrom').value, to = $('rTo').value;
+  const inRange = d => (!from || String(d).slice(0, 10) >= from) && (!to || String(d).slice(0, 10) <= to);
+  const before = d => from && String(d).slice(0, 10) < from;
+  const fl = firms.filter(f => inFirm(f.id) && products.some(p => p.firm_id === f.id));
+  if (!fl.length) return notify('Ekstre için ürün yok.', 'warning');
+  const period = from || to ? `${from ? fmtD(from) : 'Başlangıç'} – ${to ? fmtD(to) : fmtD(today())}` : 'Tüm zamanlar';
+  const tL = v => num(r2(v));
+  const sections = fl.map(f => {
+    const ps = products.filter(p => p.firm_id === f.id);
+    let T = { dev: 0, in: 0, out: 0, kal: 0 };
+    const sum = [], det = [];
+    const ships = shipments.filter(s => s.firm_id === f.id && inRange(s.ship_date));
+    ps.forEach(p => {
+      const rows = productHistory(p).sort((a, b) => String(a.d).localeCompare(String(b.d)) || (b.k === 'acilis') - (a.k === 'acilis'));
+      const dev = r2(rows.filter(r => before(r.d)).reduce((a, r) => a + r.q, 0));
+      const per = rows.filter(r => !before(r.d) && inRange(r.d));
+      const inn = r2(per.filter(r => r.q > 0).reduce((a, r) => a + r.q, 0));
+      const out = r2(-per.filter(r => r.q < 0).reduce((a, r) => a + r.q, 0));
+      const kal = r2(dev + inn - out);
+      T.dev += dev; T.in += inn; T.out += out; T.kal += kal;
+      sum.push(`<tr><td>${esc(p.code ? p.code + ' – ' : '')}${esc(p.name)}</td><td class="n">${tL(dev)}</td><td class="n doc-pos">${inn ? '+' + tL(inn) : '–'}</td>
+        <td class="n doc-neg">${out ? '−' + tL(out) : '–'}</td><td class="n"><b>${tL(kal)}</b></td><td class="n">${pack(p) ? tL(kal / setL(p)) : '–'}</td></tr>`);
+      if (!per.length && !dev) return;
+      let bal = dev;
+      const lines = per.map(r => {
+        bal = r2(bal + r.q);
+        const sh = r.shipId && shipments.find(x => x.id === r.shipId);
+        const it = sh && sh.items.find(i => i.product_id === p.id);
+        const det2 = it ? `${it.teneke != null ? num(it.teneke) + ' tnk • ' : ''}${num(it.boya)} L boya${Number(it.sert) ? ' + ' + num(it.sert) + ' L sert.' : ''}` : '';
+        return `<tr><td>${dlab(r.d)}</td><td>${esc(r.t)}${det2 ? `<div class="doc-muted">${det2}</div>` : ''}</td>
+          <td class="n doc-pos">${r.q > 0 ? tL(r.q) : ''}</td><td class="n doc-neg">${r.q < 0 ? tL(-r.q) : ''}</td><td class="n">${tL(bal)}</td></tr>`;
+      }).join('');
+      det.push(`<div class="doc-prod"><div style="font-weight:700;margin-bottom:3px">${esc(p.code ? p.code + ' – ' : '')}${esc(p.name)}
+        <span class="doc-muted">${pack(p) ? `(${num(pack(p))} L teneke${hard(p) ? ' + ' + num(hard(p)) + ' L sertleştirici' : ''})` : ''}</span></div>
+        <table class="doc-t"><thead><tr><th style="width:78px">Tarih</th><th>Açıklama</th><th class="n">Giriş (L)</th><th class="n">Çıkış (L)</th><th class="n">Bakiye (L)</th></tr></thead>
+        <tbody>${from ? `<tr><td>${fmtD(from)}</td><td><i>Devreden bakiye</i></td><td></td><td></td><td class="n">${tL(dev)}</td></tr>` : ''}${lines}</tbody>
+        <tfoot><tr><td colspan="2">Dönem sonu kalan</td><td class="n">${inn ? tL(inn) : ''}</td><td class="n">${out ? tL(out) : ''}</td><td class="n">${tL(kal)}</td></tr></tfoot></table></div>`);
+    });
+    const shipRows = ships.slice().sort((a, b) => String(a.ship_date).localeCompare(String(b.ship_date))).map(s => `<tr><td>${fmtD(s.ship_date)}</td><td>${esc(s.irsaliye || '-')}</td>
+      <td>${s.items.map(i => esc(prodById(i.product_id).name)).join(', ')}</td><td class="n">${tL(shipTotal(s))}</td></tr>`).join('');
+    return `<div style="break-before:${f === fl[0] ? 'auto' : 'page'}">
+      <div class="d-flex align-items-center gap-2 mt-2 mb-2" style="border-bottom:2px solid #111;padding-bottom:6px">${firmLogo(f, 30)}<div style="font-size:15px;font-weight:700">${esc(f.name)}</div></div>
+      <div class="doc-h2">Ürün bazında özet</div>
+      <table class="doc-t"><thead><tr><th>Ürün</th><th class="n">Devreden</th><th class="n">Eklenen</th><th class="n">Teslim alınan</th><th class="n">Kalan (L)</th><th class="n">Kalan teneke</th></tr></thead>
+        <tbody>${sum.join('')}</tbody>
+        <tfoot><tr><td>Toplam</td><td class="n">${tL(T.dev)}</td><td class="n">${T.in ? '+' + tL(T.in) : '–'}</td><td class="n">${T.out ? '−' + tL(T.out) : '–'}</td><td class="n">${tL(T.kal)}</td><td></td></tr></tfoot></table>
+      <div class="doc-h2">Dönem sevkiyatları (${ships.length} irsaliye)</div>
+      ${ships.length ? `<table class="doc-t"><thead><tr><th style="width:78px">Tarih</th><th>İrsaliye No</th><th>Ürünler</th><th class="n">Toplam (L)</th></tr></thead><tbody>${shipRows}</tbody>
+        <tfoot><tr><td colspan="3">Toplam teslim alınan</td><td class="n">${tL(ships.reduce((a, s) => a + shipTotal(s), 0))}</td></tr></tfoot></table>` : '<div class="doc-muted">Bu dönemde sevkiyat yok.</div>'}
+      <div class="doc-h2">Hareket ekstresi</div>
+      ${det.join('') || '<div class="doc-muted">Hareket yok.</div>'}
+    </div>`;
+  }).join('');
+  const html = `<div class="doc-bar">
+      <button class="btn btn-light border btn-sm" onclick="closeEkstre()"><i class="bi bi-arrow-left"></i> Kapat</button>
+      <button class="btn btn-dark btn-sm" onclick="window.print()"><i class="bi bi-printer"></i> Yazdır / PDF Kaydet</button></div>
+    <div class="doc-page">
+      <div class="d-flex justify-content-between align-items-start gap-3">
+        <img src="../logo-yildiz.webp" alt="Yıldız Kumlama Boya" style="height:46px">
+        <div class="text-end"><h1>EMANET STOK EKSTRESİ</h1>
+          <div class="doc-muted">Dönem: <b style="color:#111">${period}</b><br>Düzenleme: ${fmtD(today())} ${new Date().toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' })}</div></div>
+      </div>
+      <div class="doc-muted mt-2">Firmalarda emanet olarak bekleyen boya ve sertleştiricilerin dönem içindeki giriş, teslim alma ve kalan durumunu gösterir. Miktarlar litredir; teneke sayısı (teneke + sertleştirici seti) yaklaşıktır.</div>
+      ${sections}
+      <div class="doc-sign"><div><b>Yıldız Kumlama Boya</b><div class="doc-muted">Ad Soyad / İmza</div></div><div><b>Firma Yetkilisi</b><div class="doc-muted">Ad Soyad / İmza / Kaşe</div></div></div>
+    </div>`;
+  let v = $('docView');
+  if (!v) { v = document.createElement('div'); v.id = 'docView'; document.body.appendChild(v); }
+  v.innerHTML = html; v.classList.remove('d-none');
+  document.title = `Emanet Ekstresi ${fl.length === 1 ? fl[0].name + ' ' : ''}${today()}`;
+  history.pushState({ doc: 1 }, '', '#ekstre');
+}
+function closeEkstre() {
+  const v = $('docView'); if (v) v.classList.add('d-none');
+  document.title = 'Yıldız Emanet Takip';
+  if (location.hash === '#ekstre') history.back();
 }
 
 // ---------- ayarlar ----------
