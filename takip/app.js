@@ -349,15 +349,26 @@ async function irsaliyeSecildi(inp) {
     irsBox(`<div class="d-flex align-items-center p-2 border rounded-3 bg-white">${thumb}<div class="tiny">Fotoğraf sevkiyata eklenecek. Otomatik okuma için Ayarlar'dan Gemini anahtarı girin.</div></div>`);
     return;
   }
-  irsBox(`<div class="d-flex align-items-center p-2 border rounded-3 bg-white">${thumb}<div class="tiny"><span class="spinner-border spinner-border-sm me-1"></span>İrsaliye okunuyor…</div></div>`);
+  await irsOku();
+}
+async function irsOku() {
+  if (!shipPhoto) return;
+  const thumb = `<img src="${shipPhoto}" alt="İrsaliye" style="height:64px;border-radius:8px;border:1px solid #e5e7eb" class="me-2">`;
+  const busy = t => irsBox(`<div class="d-flex align-items-center p-2 border rounded-3 bg-white">${thumb}<div class="tiny"><span class="spinner-border spinner-border-sm me-1"></span>${t}</div></div>`);
+  busy('İrsaliye okunuyor…');
   try {
-    const r = await readIrsaliye(data);
+    const r = await readIrsaliye(shipPhoto, busy);
     applyIrsaliye(r, thumb);
   } catch (e) {
-    irsBox(`<div class="d-flex align-items-center p-2 border rounded-3 bg-white">${thumb}<div class="tiny text-danger">Okunamadı: ${esc(e.message)}. Bilgileri elle girin; fotoğraf yine de kaydedilir.</div></div>`);
+    const yogun = /high demand|overloaded|unavailable|try again|quota|rate|exhausted|429|503/i.test(e.message);
+    irsBox(`<div class="d-flex align-items-center p-2 border rounded-3 bg-white">${thumb}<div class="tiny">
+      <div class="text-danger">${yogun ? 'Google şu an yoğun, irsaliye okunamadı.' : 'Okunamadı: ' + esc(e.message)}</div>
+      <button class="btn btn-sm btn-primary mt-1" onclick="irsOku()"><i class="bi bi-arrow-repeat"></i> Tekrar Dene</button>
+      <div class="text-secondary mt-1">İsterseniz bilgileri elle girin; fotoğraf yine de kaydedilir.</div></div></div>`);
   }
 }
-async function readIrsaliye(dataUrl) {
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+async function readIrsaliye(dataUrl, busy = () => {}) {
   if (!aiKeyCache) aiKeyCache = await rpc('et_get_ai_key');
   if (!aiKeyCache || aiKeyCache === true) throw new Error('Gemini anahtarı yok');
   const firmList = firms.map(f => ({ firma_id: f.id, ad: f.name }));
@@ -377,16 +388,23 @@ FİRMALAR: ${JSON.stringify(firmList)}
 EMANET ÜRÜNLERİ: ${JSON.stringify(prodList)}`;
   const body = { contents: [{ parts: [{ text: prompt }, { inline_data: { mime_type: 'image/jpeg', data: dataUrl.split(',')[1] } }] }],
     generationConfig: { temperature: 0, responseMimeType: 'application/json' } };
+  // Yoğunluk/kota hatasında sıradaki modele geçer; hepsi yoğunsa biraz bekleyip bir tur daha dener
   let lastErr = 'Model bulunamadı';
-  for (const m of GEMINI_MODELS) {
-    const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${m}:generateContent`, {
-      method: 'POST', headers: { 'Content-Type': 'application/json', 'x-goog-api-key': aiKeyCache }, body: JSON.stringify(body) });
-    const j = await res.json().catch(() => ({}));
-    if (res.status === 404) { lastErr = (j.error && j.error.message) || lastErr; continue; }
+  for (let tur = 0; tur < 2; tur++) {
+   if (tur) { busy('Google yoğun, birkaç saniye içinde tekrar deneniyor…'); await sleep(4000); }
+   for (const m of GEMINI_MODELS) {
+    let res, j;
+    try {
+      res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${m}:generateContent`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json', 'x-goog-api-key': aiKeyCache }, body: JSON.stringify(body) });
+      j = await res.json().catch(() => ({}));
+    } catch (e) { lastErr = 'Bağlantı kurulamadı'; continue; }
+    if ([404, 429, 500, 502, 503, 504].includes(res.status)) { lastErr = (j.error && j.error.message) || ('HTTP ' + res.status); continue; }
     if (!res.ok) throw new Error((j.error && j.error.message) || ('HTTP ' + res.status));
     const txt = (((j.candidates || [])[0] || {}).content || {}).parts?.map(x => x.text || '').join('') || '';
     const clean = txt.replace(/^```(json)?/i, '').replace(/```$/, '').trim();
-    try { return JSON.parse(clean); } catch (e) { throw new Error('Yanıt çözülemedi'); }
+    try { return JSON.parse(clean); } catch (e) { lastErr = 'Yanıt çözülemedi'; continue; }
+   }
   }
   throw new Error(lastErr);
 }

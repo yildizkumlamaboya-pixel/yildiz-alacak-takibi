@@ -122,8 +122,13 @@
           <div class="section-title" id="shipFormTitle">Yeni sevkiyat</div>
           <button class="btn btn-sm btn-light border" onclick="closeShipForm()"><i class="bi bi-x-lg"></i></button>
         </div>
+        <input id="irsCam" type="file" accept="image/*" capture="environment" class="d-none" onchange="irsaliyeSecildi(this)">
         <input id="irsFile" type="file" accept="image/*" class="d-none" onchange="irsaliyeSecildi(this)">
-        <button class="btn btn-outline-primary w-100 mb-2" onclick="$('irsFile').click()"><i class="bi bi-camera me-1"></i>İrsaliye Fotoğrafından Doldur</button>
+        <div class="small-label">İrsaliyeden otomatik doldur</div>
+        <div class="row g-2 mb-2">
+          <div class="col-6"><button class="btn btn-primary w-100" onclick="$('irsCam').click()"><i class="bi bi-camera me-1"></i>Fotoğraf Çek</button></div>
+          <div class="col-6"><button class="btn btn-outline-primary w-100" onclick="$('irsFile').click()"><i class="bi bi-image me-1"></i>Galeriden Seç</button></div>
+        </div>
         <div id="irsBox" class="d-none mb-2"></div>
         <div class="row g-2 mb-2">
           <div class="col-12 col-sm-6">
