@@ -420,7 +420,7 @@ Görevin:
 1) Düzenleyen firmayı aşağıdaki FİRMALAR listesinden eşleştir (firma_id). Eşleşmezse null.
 2) İrsaliye numarasını (seri ve sıra no birlikte) oku. Tarihleri oku: "Fiili Sevk Tarihi"/"Sevk Tarihi" alanını sevk_tarihi olarak, "Düzenleme Tarihi"/"İrsaliye Tarihi" alanını duzenleme_tarihi olarak YYYY-MM-DD biçiminde yaz (gün.ay.yıl biçimini doğru çevir). Okunamayanı null bırak.
 3) İrsaliyedeki ürün satırlarından YALNIZCA aşağıdaki EMANET ÜRÜNLERİ listesindeki bir ürünle eşleşenleri al. Eşleştirirken ürün kodu, renk kodu (RAL vb.) ve ürün adını kullan; emin değilsen alma. Eşleşmeyen satırları "atlananlar" listesine yaz.
-4) Her alınan satır için miktarı ve birimini oku. Birim: litre ise "L", kilogram ise "KG", teneke/kova/adet/ambalaj ise "ADET". Satırda "HARDENER", "HARD.", "SERTLEŞTİRİCİ", "SERT.", "KÜR", "CURING AGENT", "B KOMPONENT", "COMP. B" gibi bir ifade varsa o satır SERTLEŞTİRİCİDİR: "sertlestirici": true yaz ve onu ait olduğu boya ürününe (aynı ürün ailesi/kodu, aynı seri; renk kodu olmayabilir) eşleştir; sertleştiricinin kendisi listede ayrıca olmasa bile bu satırı ATLAMA. Aynı boya için birden çok sertleştirici satırı varsa ayrı ayrı yaz.
+4) Her alınan satır için miktarı ve birimini oku. Birim: litre ise "L", kilogram ise "KG", teneke/kova/adet/ambalaj ise "ADET". Satırda "HARDENER", "HARD.", "SERTLEŞTİRİCİ", "SERT.", "KÜR", "CURING AGENT", "B KOMPONENT", "COMP. B" gibi bir ifade varsa o satır SERTLEŞTİRİCİDİR: "sertlestirici": true yaz ve onu ait olduğu boya ürününe (aynı ürün ailesi/kodu, aynı seri; renk kodu olmayabilir) eşleştir; sertleştiricinin kendisi listede ayrıca olmasa bile bu satırı ATLAMA. Ancak sertleştirici, listede OLMAYAN bir boyaya aitse (emanet dışı boya) onu alma, "atlananlar"a yaz. Aynı boya için birden çok sertleştirici satırı varsa ayrı ayrı yaz.
 Sayılarda Türkçe biçimi dikkate al (1.250,5 = 1250.5).
 YALNIZCA şu JSON'u döndür:
 {"firma_id": number|null, "firma_adi": string, "irsaliye_no": string, "sevk_tarihi": "YYYY-MM-DD"|null, "duzenleme_tarihi": "YYYY-MM-DD"|null,
@@ -480,6 +480,15 @@ function applyIrsaliye(r, thumb) {
       o.boya = r2((o.boya || 0) + q);
     }
     by.set(p.id, o);
+  });
+  // Sertleştirici her zaman boyaya oranla hesaplanır (teneke × sertleştirici L): irsaliyedeki sertleştirici
+  // emanet dışı boyalara da ait olabileceği için okunan miktar yalnızca kontrol için kullanılır.
+  by.forEach((o, pid) => {
+    const p = prodById(pid);
+    if (o.boya == null && o.teneke == null) { warn.push(`${p.name}: yalnızca sertleştirici bulundu, boyası irsaliyede yok; alınmadı.`); by.delete(pid); return; }
+    const exp = autoSert({ ...o, sert: null });
+    if (o.sert != null && Math.abs(o.sert - exp) > 0.05) warn.push(`${p.name}: irsaliyede ${num(o.sert)} L sertleştirici okundu; boya oranına göre ${num(exp)} L alındı.`);
+    o.sert = null;
   });
   $('shRows').innerHTML = '';
   if (by.size) by.forEach(o => addShipRow({ product_id: o.product_id, teneke: o.teneke, boya: o.boya ?? (o.teneke != null ? r2(o.teneke * pack(prodById(o.product_id))) : 0),
