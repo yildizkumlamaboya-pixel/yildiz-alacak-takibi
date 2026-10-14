@@ -1,4 +1,4 @@
-const CACHE = 'emanet-takip-v4';
+const CACHE = 'emanet-takip-v5';
 const ASSETS = ['./', './index.html', './app.js', './config.js', './manifest.json', '../logo-yildiz.webp', '../icon-192.png'];
 self.addEventListener('install', e => { e.waitUntil(caches.open(CACHE).then(c => c.addAll(ASSETS))); self.skipWaiting(); });
 self.addEventListener('activate', e => {

@@ -140,13 +140,21 @@ const emptyCard = t => `<div class="card p-3 text-center text-secondary small">$
 // ---------- sevkiyat listesi ----------
 function shipCard(s) {
   const f = firmById(s.firm_id);
-  const names = s.items.map(i => esc(prodById(i.product_id).name || '?')).join(', ');
+  const lines = s.items.map(i => {
+    const p = prodById(i.product_id), l = r2(Number(i.boya) + Number(i.sert));
+    const tn = i.teneke != null ? num(i.teneke) + ' tnk • ' : (pack(p) ? '≈ ' + num(r2(i.boya / pack(p))) + ' tnk • ' : '');
+    return `<div class="ln"><span>${esc(p.name || '?')}</span><span class="text-nowrap fw-semibold">${tn}${num(l)} L</span></div>`;
+  }).join('');
   return `<div class="card p-3 clickable" onclick="showShipment(${s.id})">
-    <div class="d-flex justify-content-between gap-2">
-      <div class="min-w-0"><div class="fw-semibold small">${esc(f.name || '')} • İrsaliye ${esc(s.irsaliye || '-')}</div>
-        <div class="tiny text-secondary text-truncate">${names}</div></div>
-      <div class="text-end text-nowrap"><div class="fw-bold">${num(shipTotal(s))} L</div><div class="tiny text-secondary">${fmtD(s.ship_date)}</div></div>
-    </div></div>`;
+    <div class="d-flex justify-content-between align-items-start gap-2">
+      <div class="min-w-0">
+        <div class="fw-semibold">${esc(f.name || '')}</div>
+        <div class="tiny text-secondary text-break"><i class="bi bi-receipt"></i> ${esc(s.irsaliye || '-')} &nbsp;•&nbsp; ${fmtD(s.ship_date)}${photos.has(s.id) ? ' &nbsp;<i class="bi bi-image"></i>' : ''}</div>
+      </div>
+      <span class="tot-badge">${num(shipTotal(s))} L</span>
+    </div>
+    <div class="ship-items">${lines}</div>
+  </div>`;
 }
 function filteredShips() {
   const q = $('shipSearch').value.trim().toLocaleLowerCase('tr'), m = $('shipMonth').value;
@@ -477,7 +485,7 @@ function renderStock() {
         const s = stockOf(p), low = Number(p.warn) > 0 && s.kalan < Number(p.warn);
         return `<div class="card p-3 clickable ${low ? 'low-card' : ''}" onclick="showProduct(${p.id})">
           <div class="d-flex justify-content-between gap-2">
-            <div><div class="fw-semibold small">${esc(p.name)}</div><div class="tiny text-secondary">${esc(p.code)}${pack(p) ? ' • ' + num(pack(p)) + ' L teneke' + (hard(p) ? ' + ' + num(hard(p)) + ' L sert.' : '') : ''}</div></div>
+            <div class="min-w-0"><div class="fw-semibold small text-break">${esc(p.name)}</div><div class="tiny text-secondary">${esc(p.code)}${pack(p) ? ' • ' + num(pack(p)) + ' L teneke' + (hard(p) ? ' + ' + num(hard(p)) + ' L sert.' : '') : ''}</div></div>
             <div class="text-end text-nowrap"><div class="tiny text-secondary">Kalan</div><div class="fw-bold ${low ? 'text-danger' : ''}">${num(s.kalan)} L</div>
               ${tnkTxt(p, s.kalan) ? `<div class="tiny text-secondary">≈ ${tnkTxt(p, s.kalan).replace(' + ', '<br>+ ')}</div>` : ''}</div>
           </div></div>`;
@@ -507,7 +515,7 @@ function showProduct(id) {
 function renderProducts() {
   const ps = products.filter(p => inFirm(p.firm_id));
   $('prodList').innerHTML = ps.map(p => `<div class="card p-3 clickable" onclick="openProduct(${p.id})">
-    <div class="d-flex justify-content-between gap-2"><div><div class="fw-semibold small">${esc(p.name)}</div>
+    <div class="d-flex justify-content-between gap-2"><div class="min-w-0"><div class="fw-semibold small text-break">${esc(p.name)}</div>
       <div class="tiny text-secondary">${esc(firmById(p.firm_id).name)} • ${esc(p.code || 'kodsuz')} • ${pack(p) ? num(pack(p)) + ' L teneke' : 'teneke L yok'}${hard(p) ? ' + ' + num(hard(p)) + ' L sertleştirici' : ''}</div></div>
       <div class="text-end tiny text-secondary">Başlangıç<br><b class="text-dark">${num(p.opening)} L</b></div></div></div>`).join('') || emptyCard('Ürün yok.');
 }
