@@ -263,6 +263,10 @@
       <div class="card mb-3"><div class="table-responsive"><table class="table table-sm mb-0 align-middle">
         <thead><tr><th>Ürün</th><th class="text-end">Teslim alınan</th><th class="text-end">Teneke</th><th class="text-end">Kalan</th></tr></thead>
         <tbody id="repBody"></tbody></table></div></div>
+      <div class="d-flex justify-content-between align-items-center mb-2"><div class="section-title">Sevkiyat detayı</div><span id="repShipCount" class="tiny text-secondary"></span></div>
+      <div class="card mb-3"><div class="table-responsive"><table class="table table-sm mb-0 align-middle">
+        <thead><tr><th>Sevk tarihi</th><th>İrsaliye No</th><th>Ürün</th><th class="text-end">Teneke</th><th class="text-end">Boya L</th><th class="text-end">Sert. L</th><th class="text-end">Toplam L</th></tr></thead>
+        <tbody id="repShips"></tbody><tfoot id="repShipsFoot"></tfoot></table></div></div>
       <div class="row g-2">
         <div class="col-6"><button class="btn btn-dark w-100" onclick="openEkstre()"><i class="bi bi-file-earmark-pdf me-1"></i>Ekstre / PDF</button></div>
         <div class="col-6"><button class="btn btn-outline-success w-100" onclick="exportExcel(true)"><i class="bi bi-file-earmark-excel me-1"></i>Excel'e Aktar</button></div>

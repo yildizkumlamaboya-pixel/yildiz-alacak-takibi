@@ -676,6 +676,12 @@ function setRange(k) {
   if (k === 'all') { $('rFrom').value = ''; $('rTo').value = ''; }
   renderReport();
 }
+function itemTnk(i) { const p = prodById(i.product_id); return i.teneke != null ? Number(i.teneke) : (pack(p) ? r2(Number(i.boya) / pack(p)) : null); }
+function reportShips() {   // dönem + firma filtresine uyan sevkiyatlar, eskiden yeniye
+  const from = $('rFrom').value, to = $('rTo').value;
+  return shipments.filter(s => inFirm(s.firm_id) && (!from || String(s.ship_date) >= from) && (!to || String(s.ship_date).slice(0, 10) <= to))
+    .slice().sort((a, b) => String(a.ship_date).localeCompare(String(b.ship_date)) || a.id - b.id);
+}
 function reportRows() {
   const from = $('rFrom').value, to = $('rTo').value;
   const ok = d => (!from || String(d) >= from) && (!to || String(d).slice(0, 10) <= to);
@@ -692,6 +698,22 @@ function renderReport() {
   const nShip = shipments.filter(s => inFirm(s.firm_id) && (!from || s.ship_date >= from) && (!to || String(s.ship_date).slice(0, 10) <= to)).length;
   $('repStats').innerHTML = `<div class="col-6"><div class="stat"><div class="tiny text-secondary">Teslim alınan</div><div class="v">${num(r2(tot))} L</div></div></div>
     <div class="col-6"><div class="stat"><div class="tiny text-secondary">Sevkiyat</div><div class="v">${nShip}</div></div></div>`;
+  // sevkiyat detayı: her kalem bir satır, irsaliye bilgisi sevkiyatın ilk satırında
+  const sl = reportShips();
+  let tt = { t: 0, b: 0, s: 0 };
+  $('repShipCount').textContent = sl.length ? `${sl.length} irsaliye` : '';
+  $('repShips').innerHTML = sl.map(s => s.items.map((i, k) => {
+    const p = prodById(i.product_id), tn = itemTnk(i);
+    tt.t += tn || 0; tt.b += Number(i.boya); tt.s += Number(i.sert);
+    const first = k === 0, bt = first ? ' style="border-top:2px solid #d1d5db"' : '';
+    return `<tr class="clickable" onclick="showShipment(${s.id})"${bt}>
+      <td class="text-nowrap">${first ? fmtD(s.ship_date) : ''}</td>
+      <td class="text-nowrap">${first ? `<b>${esc(s.irsaliye || '-')}</b>${firmSel ? '' : `<div class="tiny text-secondary">${esc(firmById(s.firm_id).name)}</div>`}` : ''}</td>
+      <td>${esc(p.name || '?')}</td><td class="text-end">${tn != null ? num(tn) : '–'}</td>
+      <td class="text-end">${num(i.boya)}</td><td class="text-end">${Number(i.sert) ? num(i.sert) : '–'}</td>
+      <td class="text-end fw-semibold">${num(r2(Number(i.boya) + Number(i.sert)))}</td></tr>`;
+  }).join('')).join('') || '<tr><td colspan="7" class="text-center text-secondary py-3">Bu dönemde sevkiyat yok.</td></tr>';
+  $('repShipsFoot').innerHTML = sl.length ? `<tr class="fw-bold"><td colspan="3">Toplam</td><td class="text-end">${num(r2(tt.t))}</td><td class="text-end">${num(r2(tt.b))}</td><td class="text-end">${num(r2(tt.s))}</td><td class="text-end">${num(r2(tt.b + tt.s))}</td></tr>` : '';
   $('repBody').innerHTML = rows.filter(r => r.tot || r.kalan).map(r => `<tr class="clickable" onclick="showProduct(${r.p.id})">
     <td>${esc(r.p.name)}<div class="tiny text-secondary">${esc(firmById(r.p.firm_id).name)}</div></td>
     <td class="text-end">${num(r.tot)} L${r.sert ? `<div class="tiny text-secondary">${num(r.boya)} + ${num(r.sert)}</div>` : ''}</td>
@@ -745,8 +767,12 @@ function openEkstre() {
         <tbody>${from ? `<tr><td>${fmtD(from)}</td><td><i>Devreden bakiye</i></td><td></td><td></td><td class="n">${tL(dev)}</td><td class="n">${pack(p) ? tL(dev / setL(p)) : '–'}</td></tr>` : ''}${lines}</tbody>
         <tfoot><tr><td colspan="2">Dönem sonu kalan</td><td class="n">${inn ? tL(inn) + tk(p, inn) : ''}</td><td class="n">${out ? tL(out) + (pack(p) ? `<div class="doc-muted">${tL(outT)} tnk</div>` : '') : ''}</td><td class="n">${tL(kal)}</td><td class="n">${pack(p) ? tL(kal / setL(p)) : '–'}</td></tr></tfoot></table></div>`);
     });
-    const shipRows = ships.slice().sort((a, b) => String(a.ship_date).localeCompare(String(b.ship_date))).map(s => `<tr><td>${fmtD(s.ship_date)}</td><td>${esc(s.irsaliye || '-')}</td>
-      <td>${s.items.map(i => esc(prodById(i.product_id).name)).join(', ')}</td><td class="n">${tL(shipTnk(s))}</td><td class="n">${tL(shipTotal(s))}</td></tr>`).join('');
+    let st = { t: 0, b: 0, s: 0 };
+    const shipRows = ships.slice().sort((a, b) => String(a.ship_date).localeCompare(String(b.ship_date)) || a.id - b.id).map(s => s.items.map((i, k) => {
+      const tn = itemTnk(i); st.t += tn || 0; st.b += Number(i.boya); st.s += Number(i.sert);
+      return `<tr${k === 0 ? ' style="border-top:2px solid #6b7280"' : ''}><td>${k === 0 ? fmtD(s.ship_date) : ''}</td><td>${k === 0 ? `<b>${esc(s.irsaliye || '-')}</b>${s.note ? `<div class="doc-muted">${esc(s.note)}</div>` : ''}` : ''}</td>
+        <td>${esc(prodById(i.product_id).name)}</td><td class="n">${tn != null ? tL(tn) : '–'}</td><td class="n">${tL(i.boya)}</td><td class="n">${Number(i.sert) ? tL(i.sert) : '–'}</td><td class="n">${tL(Number(i.boya) + Number(i.sert))}</td></tr>`;
+    }).join('')).join('');
     return `<div style="break-before:${f === fl[0] ? 'auto' : 'page'}">
       <div class="d-flex align-items-center gap-2 mt-2 mb-2" style="border-bottom:2px solid #111;padding-bottom:6px">${firmLogo(f, 30)}<div style="font-size:15px;font-weight:700">${esc(f.name)}</div></div>
       <div class="doc-h2">Ürün bazında özet</div>
@@ -754,8 +780,8 @@ function openEkstre() {
         <tbody>${sum.join('')}</tbody>
         <tfoot><tr><td>Toplam</td><td class="n">${tL(T.dev)}<div class="doc-muted">${tL(T.tdev)} tnk</div></td><td class="n">${T.in ? '+' + tL(T.in) + `<div class="doc-muted">${tL(T.tin)} tnk</div>` : '–'}</td><td class="n">${T.out ? '−' + tL(T.out) + `<div class="doc-muted">${tL(T.tout)} tnk</div>` : '–'}</td><td class="n">${tL(T.kal)}</td><td class="n">${tL(T.tkal)}</td></tr></tfoot></table>
       <div class="doc-h2">Dönem sevkiyatları (${ships.length} irsaliye)</div>
-      ${ships.length ? `<table class="doc-t"><thead><tr><th style="width:78px">Tarih</th><th>İrsaliye No</th><th>Ürünler</th><th class="n">Teneke</th><th class="n">Toplam (L)</th></tr></thead><tbody>${shipRows}</tbody>
-        <tfoot><tr><td colspan="3">Toplam teslim alınan</td><td class="n">${tL(ships.reduce((a, s) => a + shipTnk(s), 0))}</td><td class="n">${tL(ships.reduce((a, s) => a + shipTotal(s), 0))}</td></tr></tfoot></table>` : '<div class="doc-muted">Bu dönemde sevkiyat yok.</div>'}
+      ${ships.length ? `<table class="doc-t"><thead><tr><th style="width:78px">Sevk Tarihi</th><th>İrsaliye No</th><th>Ürün</th><th class="n">Teneke</th><th class="n">Boya (L)</th><th class="n">Sert. (L)</th><th class="n">Toplam (L)</th></tr></thead><tbody>${shipRows}</tbody>
+        <tfoot><tr><td colspan="3">Toplam teslim alınan</td><td class="n">${tL(st.t)}</td><td class="n">${tL(st.b)}</td><td class="n">${tL(st.s)}</td><td class="n">${tL(st.b + st.s)}</td></tr></tfoot></table>` : '<div class="doc-muted">Bu dönemde sevkiyat yok.</div>'}
       <div class="doc-h2">Hareket ekstresi</div>
       ${det.join('') || '<div class="doc-muted">Hareket yok.</div>'}
     </div>`;
@@ -929,6 +955,9 @@ function exportExcel(onlyReport) {
     const rows = [['Firma', 'Ürün Kodu', 'Ürün', 'Teslim Alınan Boya (L)', 'Sertleştirici (L)', 'Toplam (L)', 'Teneke', 'Kalan (L)']];
     reportRows().forEach(r => rows.push([firmById(r.p.firm_id).name, r.p.code, r.p.name, r.boya, r.sert, r.tot, pack(r.p) ? r2(r.boya / pack(r.p)) : '', r.kalan]));
     sheets.push({ name: 'Rapor', rows, widths: [18, 12, 36, 14, 14, 12, 10, 12] });
+    const det = [['Sevk Tarihi', 'İrsaliye No', 'Firma', 'Ürün Kodu', 'Ürün', 'Teneke', 'Boya (L)', 'Sertleştirici (L)', 'Toplam (L)', 'Not']];
+    reportShips().forEach(s => s.items.forEach(i => { const p = prodById(i.product_id); det.push([fmtD(s.ship_date), s.irsaliye, firmById(s.firm_id).name, p.code, p.name, itemTnk(i) ?? '', Number(i.boya), Number(i.sert), r2(Number(i.boya) + Number(i.sert)), s.note]); }));
+    sheets.push({ name: 'Sevkiyat Detayı', rows: det, widths: [12, 18, 16, 11, 34, 9, 10, 14, 11, 24] });
   } else {
     const st = [['Firma', 'Ürün Kodu', 'Ürün', 'Kalan (L)', 'Teneke ≈', 'Teneke L', 'Sertleştirici L', 'Başlangıç (L)', 'Teslim Alınan (L)', 'Eklenen/Düşülen (L)', 'Uyarı (L)']];
     products.forEach(p => { const s = stockOf(p); st.push([firmById(p.firm_id).name, p.code, p.name, s.kalan, pack(p) ? r2(s.kalan / setL(p)) : '', pack(p) || '', hard(p) || '', Number(p.opening), s.out, s.add, Number(p.warn) || '']); });
