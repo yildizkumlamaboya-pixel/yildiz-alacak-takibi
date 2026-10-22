@@ -1,8 +1,26 @@
-[{
-  "relation": ["delegate_permission/common.handle_all_urls"],
+[
+ {
+  "relation": [
+   "delegate_permission/common.handle_all_urls"
+  ],
   "target": {
-    "namespace": "android_app",
-    "package_name": "com.yildizkumlama.alacak",
-    "sha256_cert_fingerprints": ["BF:14:EB:1B:8D:51:B0:E9:5D:20:CF:51:AE:E4:80:1D:F6:35:B0:00:AA:53:79:24:E1:05:53:64:CC:54:7D:47"]
+   "namespace": "android_app",
+   "package_name": "com.yildizkumlama.alacak",
+   "sha256_cert_fingerprints": [
+    "BF:14:EB:1B:8D:51:B0:E9:5D:20:CF:51:AE:E4:80:1D:F6:35:B0:00:AA:53:79:24:E1:05:53:64:CC:54:7D:47"
+   ]
   }
-}]
+ },
+ {
+  "relation": [
+   "delegate_permission/common.handle_all_urls"
+  ],
+  "target": {
+   "namespace": "android_app",
+   "package_name": "com.yildizkumlama.emanettakip",
+   "sha256_cert_fingerprints": [
+    "BF:14:EB:1B:8D:51:B0:E9:5D:20:CF:51:AE:E4:80:1D:F6:35:B0:00:AA:53:79:24:E1:05:53:64:CC:54:7D:47"
+   ]
+  }
+ }
+]

@@ -6,6 +6,7 @@ on:
     branches: [main]
     paths:
       - 'android-twa/**'
+      - 'android-takip/**'
       - '.github/workflows/apk.yml'
 
 permissions:
@@ -57,3 +58,49 @@ jobs:
             --title "Yıldız Emanet Stok APK (sürüm 2.${{ github.run_number }})" \
             --notes "Otomatik derlendi. Bildirim destekli (Chrome tabanlı). Önceki sürümün üstüne kurulur." \
             --latest
+
+  takip:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: 21
+
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.11.1'
+
+      - name: Emanet Takip APK derle
+        run: |
+          set -o pipefail
+          gradle -p android-takip assembleDebug --no-daemon --stacktrace 2>&1 | tee build.log
+
+      - name: Hata özeti
+        if: failure()
+        run: |
+          touch build.log
+          echo "::error title=Derleme hatasi::Son loglar%0A$(grep -v '^\s*at ' build.log | tail -n 60 | sed 's/%/%25/g' | sed ':a;N;$!ba;s/\n/%0A/g')"
+
+      - name: APK dosyası
+        run: |
+          cp android-takip/app/build/outputs/apk/debug/app-debug.apk EmanetTakip.apk
+          FP=$(keytool -printcert -jarfile EmanetTakip.apk | grep -m1 'SHA256:' | awk '{print $2}')
+          echo "::notice title=Imza::$FP"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: EmanetTakip-apk
+          path: EmanetTakip.apk
+
+      - name: Releases bölümüne koy
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release delete apk-takip --yes --cleanup-tag || true
+          gh release create apk-takip EmanetTakip.apk \
+            --title "Emanet Takip APK (sürüm 1.${{ github.run_number }})" \
+            --notes "Tek kullanıcılı Emanet Takip uygulaması. Eski Emanet Stok uygulamasından ayrı kurulur." \
+            --latest=false

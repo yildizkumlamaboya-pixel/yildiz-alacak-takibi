@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Emanet Takip</string>
+    <string name="launcherName">Emanet Takip</string>
+    <string name="assetStatements">
+        [{ \"relation\": [\"delegate_permission/common.handle_all_urls\"],
+           \"target\": {\"namespace\": \"web\", \"site\": \"https://yildiz-emanet-stoktakibi.vercel.app\"}}]
+    </string>
+</resources>
